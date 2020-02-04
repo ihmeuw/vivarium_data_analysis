@@ -3,6 +3,27 @@ import numpy as np, pandas as pd
 from collections import Counter
 #from neonatal.tabulation import risk_mapper
 
+def load_by_location_and_rundate(base_directory: str, locations_run_dates: dict) -> pd.DataFrame:
+    """Load output.hdf files from folders namedd with the convention 'base_directory/location/rundate/output.hdf'"""
+
+    # Use dictionary to map countries to the correct path for the Vivarium output to process
+    # E.g. /share/costeffectiveness/results/sqlns/bangladesh/2019_06_21_00_09_53
+    locactions_paths = {location: f'{base_directory}/{location.lower()}/{run_date}/output.hdf'
+                       for location, run_date in locations_run_dates.items()}
+
+    # Read in data from different countries
+    locations_outputs = {location: pd.read_hdf(path) for location, path in locactions_paths.items()}
+
+    for location, output in locations_outputs.items():
+        output['location'] = location
+
+    return pd.concat(locations_outputs.values(), copy=False, sort=False)
+
+def print_location_output_shapes(locations, all_output):
+    """Print the shapes of outputs for each location to check whether all the same size or if some data is missing"""
+    for location in locations:
+        print(location, all_output.loc[all_output.location==location].shape)
+
 # Used in .find_columns() method to categorize all columns in the data.
 # Dictionary to find output columns in specific catories by matching column names with regular expressions
 # using pd.DataFrame.filter()
@@ -17,9 +38,9 @@ def default_column_categories_to_search_regexes():
         'run_time': r'run_time', # simulation run time
         # Data about the simulation results
         'diseases_at_end': r'_prevalent_cases_at_sim_end$', # cause prevalence at end of simulation
-        'disease_event_count': r'_event_count$', # disease events throughout simulation - columns end in '_event_count'
+        'disease_event_count': r'_event_count', # disease events throughout simulation - columns end in '_event_count'
         'population': r'population', # population statistics at end of simulation
-        'person_time': r'^person_time', # string starts with 'person_time'
+        'person_time': r'person_time', # string starts with 'person_time'
         'treated_days': r'treated_days', # total number of days of treatment
         'mortality': r'^death_due_to_', # string starts with 'death_due_to_'
         'total_daly': r'^years_lived_with_disability$|^years_of_life_lost$', # sum of these 2 columns = DALYs for whole sim
