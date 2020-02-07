@@ -3,27 +3,6 @@ import numpy as np, pandas as pd
 from collections import Counter
 #from neonatal.tabulation import risk_mapper
 
-def load_by_location_and_rundate(base_directory: str, locations_run_dates: dict) -> pd.DataFrame:
-    """Load output.hdf files from folders namedd with the convention 'base_directory/location/rundate/output.hdf'"""
-
-    # Use dictionary to map countries to the correct path for the Vivarium output to process
-    # E.g. /share/costeffectiveness/results/sqlns/bangladesh/2019_06_21_00_09_53
-    locactions_paths = {location: f'{base_directory}/{location.lower()}/{run_date}/output.hdf'
-                       for location, run_date in locations_run_dates.items()}
-
-    # Read in data from different countries
-    locations_outputs = {location: pd.read_hdf(path) for location, path in locactions_paths.items()}
-
-    for location, output in locations_outputs.items():
-        output['location'] = location
-
-    return pd.concat(locations_outputs.values(), copy=False, sort=False)
-
-def print_location_output_shapes(locations, all_output):
-    """Print the shapes of outputs for each location to check whether all the same size or if some data is missing"""
-    for location in locations:
-        print(location, all_output.loc[all_output.location==location].shape)
-
 # Used in .find_columns() method to categorize all columns in the data.
 # Dictionary to find output columns in specific catories by matching column names with regular expressions
 # using pd.DataFrame.filter()
