@@ -40,7 +40,7 @@ def default_column_categories_to_search_regexes():
         'diseases_at_end': r'_prevalent_cases_at_sim_end$', # cause prevalence at end of simulation
         'disease_event_count': r'_event_count', # disease events throughout simulation - columns end in '_event_count'
         'population': r'population', # population statistics at end of simulation
-        'person_time': r'person_time', # string starts with 'person_time'
+        'person_time': r'person_time', # string contains 'person_time'
         'treated_days': r'treated_days', # total number of days of treatment
         'mortality': r'^death_due_to_', # string starts with 'death_due_to_'
         'total_daly': r'^years_lived_with_disability$|^years_of_life_lost$', # sum of these 2 columns = DALYs for whole sim
@@ -48,6 +48,9 @@ def default_column_categories_to_search_regexes():
         'yll': r'^ylls_due_to_', # YLL columns start with 'ylls_due_to_'
         'categorical_risk': r'_cat\d+_exposed', # columns for categorical risk exposures contain, e.g. '_cat16_exposed'
         'graded_sequela': r'mild|moderate|severe|unexposed', # anemia, for example
+        'proportion': r'_proportion',
+        'distribution_params': r'_mean_|_sd_', # paramaters of a distribution
+        'prevalence': r'prevalent_count', # prevalent count of a cause, e.g. 'prevalent_count_at_birth'
     }
 
 # Used in .reindex_sub_dataframes() method to create a MultiIndex from original one-level index.
