@@ -71,7 +71,7 @@ def default_column_categories_to_search_regexes():
         'graded_sequela': r'mild|moderate|severe|unexposed', # anemia, for example
         PROPORTION_COLUMN_CATEGORY: r'_proportion',
         DISTRIBUTION_MEAN_COLUMN_CATEGORY: r'_mean_', # mean of a distribution
-        DISTRIBUTION_STD_DEV_COLUMN_CATEGORY: '_sd_', # standard deviation of a distribution
+        DISTRIBUTION_STD_DEV_COLUMN_CATEGORY: r'_sd_', # standard deviation of a distribution
         'prevalence': r'prevalent_count', # prevalent count of a cause, e.g. 'prevalent_count_at_birth'
     }
 
@@ -143,7 +143,7 @@ def default_column_categories_to_extraction_regexes():
             r'^(?P<sequela>\w+)_(?P<category>mild|moderate|severe|unexposed)(?:_in_(?P<year>\d{4})|)(?:_among_(?P<age_group>\w+)|)$',
     }
 
-class BEPOutputSummarizer():
+class LSFFOutputSummarizer():
     """Class to provide functions to summarize output from neonatal model"""
 
     def __init__(self, model_output_df, column_categories_to_search_regexes=None):
