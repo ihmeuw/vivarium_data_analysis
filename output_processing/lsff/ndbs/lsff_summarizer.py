@@ -159,12 +159,12 @@ class LSFFOutputSummarizer():
         # Initializes self.columns, self.found_columns, self.missing_columns, self.repeated_columns, self.empty_categories:
 #         self.find_columns(column_categories_to_search_regexes)
 #         # Sub-DataFrames corresponding to each column category
-#         self.subdata = {column_category: self.data[column_names]
+#         self._subdata = {column_category: self.data[column_names]
 #                         for column_category, column_names in self.columns.items()}
         self.column_categories_to_extraction_regexes = None
         self.index_column_categories = None # or an empty tuple ()?
 #         self.index_columns = None
-        # Initializes self.subdata,
+        # Initializes self._subdata,
         # self.found_columns, self.missing_columns, self.repeated_columns, self.empty_categories:
         self.categorize_data_by_column(column_categories_to_search_regexes)
 
@@ -177,7 +177,7 @@ class LSFFOutputSummarizer():
         # If a search dictionary was passed, update our current dictionary with it
         if column_categories_to_search_regexes is not None:
             self.column_categories_to_search_regexes.update(column_categories_to_search_regexes)
-        
+
 #         # If dictionary was passed, replace any existing dictionary
 #         if column_categories_to_search_regexes is not None:
 #             self.column_categories_to_search_regexes = column_categories_to_search_regexes
@@ -193,26 +193,26 @@ class LSFFOutputSummarizer():
             all_data = self.data
 
         # Create dictionary mapping each column category to a sub-dataframe of columns in that category
-        self.subdata = {category: all_data.filter(regex=cat_regex)
+        self._subdata = {category: all_data.filter(regex=cat_regex)
                         for category, cat_regex in self.column_categories_to_search_regexes.items()}
 
         # Create dictionary mapping each column category to a pd.Index of column names in that category
-        # 2019-07-18: Eliminating this attribute in favor of accessing column names via subdata frames.
+        # 2019-07-18: Eliminating this attribute in favor of accessing column names via _subdata frames.
         # 2019-07-26: Reinstating this attribute to retain original column names vs. only MultiIndices after parsing.
 #         self.columns = {category: self.data.filter(regex=cat_regex).columns
 #                         for category, cat_regex in self.column_categories_to_search_regexes.items()}
-        self._columns = pd.Series({category: df.columns for category, df in self.subdata.items()})
+        self._columns = pd.Series({category: df.columns for category, df in self._subdata.items()})
 
         # Get a list (or pd.Series) of the found columns to check for missing or duplicate columns
         # found_columns = pd.concat(pd.Series(col_names) for col_names in columns.values())
-        self.found_columns = [column for cat_data in self.subdata.values() for column in cat_data.columns]
+        self.found_columns = [column for cat_data in self._subdata.values() for column in cat_data.columns]
 
         # Find any missing or duplicate columns
         self.missing_columns = set(self.data.columns) - set(self.found_columns)
         self.repeated_columns = {column_name: count for column_name, count in Counter(self.found_columns).items() if count > 1}
 
         # Also find any categories that didn't return a match
-        self.empty_categories = [category for category, cat_data in self.subdata.items() if len(cat_data.columns) == 0]
+        self.empty_categories = [category for category, cat_data in self._subdata.items() if len(cat_data.columns) == 0]
 
     def print_column_report(self):
         """
@@ -236,25 +236,32 @@ class LSFFOutputSummarizer():
 
     def column_category_counts(self):
         """Get a dictionary mapping column categories to the number of columns found in that category."""
-        return {category: len(cat_data.columns) for category, cat_data in self.subdata.items()}
+        return {category: len(cat_data.columns) for category, cat_data in self._subdata.items()}
 
     def column_categories(self):
         """Get the list of column categories."""
 #         return list(self.column_categories_to_search_regexes.keys()) # This should be equivalent
-        return list(self.subdata.keys())
+        return list(self._subdata.keys())
 
     def columns(self, *column_categories):
         """Get the column names in the specified category(ies), or in all categories if none specified."""
-#         return self.subdata[column_category].columns
+#         return self._subdata[column_category].columns
 #         return self._columns[column_category]
         if len(column_categories) == 0:
             column_categories = self.column_categories()
         return [column for columns in self._columns[list(column_categories)] for column in columns]
-    
+
     def index_columns(self):
         """Get the names of the index columns. Returns an empty list if index column categories have not been assigned."""
         if self.index_column_categories is None: return []
         return self.columns(*self.index_column_categories)
+
+    def subdata(self, column_category=None):
+        """Get the sub-dataframe containing columns of the specified category, or all the columns if no category is specified."""
+        if column_category is None:
+            return self.data
+        else:
+            return self._subdata[column_category]
 
     def rename_intervention_columns(self, column_name_mapper=None):
         """
@@ -273,8 +280,8 @@ class LSFFOutputSummarizer():
             intervention_columns = column_name_mapper.values()
 
         self.data = self.data.rename(columns=column_name_mapper)
-        self.subdata['intervention'] = self.data[intervention_columns]
-        self._columns['intervention'] = self.subdata['intervention'].columns
+        self._subdata['intervention'] = self.data[intervention_columns]
+        self._columns['intervention'] = self._subdata['intervention'].columns
         self.column_categories_to_search_regexes['intervention'] = '|'.join(intervention_columns)
 
     def aggregate_over_random_seeds(self, index_column_categories=None, alternative_aggregation_functions=None):
@@ -287,7 +294,7 @@ class LSFFOutputSummarizer():
         if index_column_categories is not None:
             self.index_column_categories = index_column_categories
         # Otherwise, initialize to the default INDEX_COLUMN_CATEGORIES if necessary
-        elif self.index_column_categories is None: 
+        elif self.index_column_categories is None:
 #             self.index_columns = [*self.columns('location'), *self.columns('intervention'), *self.columns('input_draw')]
 #             self.index_columns = [column for category in INDEX_COLUMN_CATEGORIES for column in self._columns[category]]
             self.index_column_categories = INDEX_COLUMN_CATEGORIES
@@ -298,56 +305,56 @@ class LSFFOutputSummarizer():
 #         self.data = self.data.drop(columns=self.columns(RANDOM_SEED_COLUMN_CATEGORY)) # Don't sum random seeds. Instead...
 #         self.data[RANDOM_SEED_COUNT_COLUMN] = 1 # This will count random seeds when we do .groupby().sum()
 #         # Update the mapped random_seed sub-dataframe and column name with the new value
-#         self.subdata[RANDOM_SEED_COLUMN_CATEGORY] = self.data[[RANDOM_SEED_COUNT_COLUMN]] # Use a list to create a DataFrame rather than a Series
-#         self._columns[RANDOM_SEED_COLUMN_CATEGORY] = self.subdata[RANDOM_SEED_COLUMN_CATEGORY].columns
+#         self._subdata[RANDOM_SEED_COLUMN_CATEGORY] = self.data[[RANDOM_SEED_COUNT_COLUMN]] # Use a list to create a DataFrame rather than a Series
+#         self._columns[RANDOM_SEED_COLUMN_CATEGORY] = self._subdata[RANDOM_SEED_COLUMN_CATEGORY].columns
 
         # ADD CODE TO HANDLE AGGREGATIONS BESIDES SUM (Done)
         # Use SPECIAL_AGGREGATIONS_BY_CATEGORY dictionary and .agg()
         # CURRENT VERSION IS SLOW - CHANGE to use .sum() on most columns,
         # and only use .agg(agg_dict) for special columns, then concatenate.
 #         self.data = self.data.groupby(self.index_columns).agg(agg_dict)
-        
+
 #         non_sum_columns = [column
 #                            for categories in SPECIAL_AGGREGATIONS_BY_CATEGORY['column_categories']
 #                            for column in self.columns(*categories)
 #                           ]
 #         sum_columns = [column for column in self.columns() if column not in non_sum_columns]
-        
+
         agg_df = SPECIAL_AGGREGATIONS_BY_CATEGORY.set_index('function_name')
         if alternative_aggregation_functions is not None:
             for function_name, function in alternative_aggregation_functions.items():
                 agg_df.loc[function_name, 'function'] = function
-        
+
         non_sum_categories = [category
                                  for categories in agg_df['column_categories']
                                  for category in categories
                              ]
         sum_categories = set(self.column_categories()) - set(non_sum_categories) - set(self.index_column_categories)
-        
+
 #         print(sum_categories)
-        
+
         sum_columns = self.columns(*sum_categories)
         sum_data = self.data.groupby(self.index_columns())[sum_columns].sum()
         aggregated_dfs = [sum_data]
-        
+
         for function_name in agg_df.index:
             agg_columns = self.columns(*agg_df.loc[function_name, 'column_categories'])
             aggregated_data = self.data.groupby(self.index_columns())[agg_columns].agg(
                 agg_df.loc[function_name, 'function']
             )
             aggregated_dfs.append(aggregated_data)
-            
+
         self.data = pd.concat(aggregated_dfs, axis=1, copy=False)
-        
+
 #         self.data = self.data.groupby(self.index_columns).sum()
-        
+
         # Perhaps add some code to count random seeds per location_intervention_draw combination,
         # and count how many scenarios each draw appears in. Ok, random_seed_count is now included.
         # It could be useful to add separate functions to return DataFrames with the following columns:
         # a) location, random_seed_count, number_of_scenario_draw_combinations
         # b) location, draw_number, number_of_scenarios
         # These should be simple to implement by passing a Counter object into a new dataframe
-#         self.subdata = {category: self.data.filter(regex=cat_regex)
+#         self._subdata = {category: self.data.filter(regex=cat_regex)
 #                         for category, cat_regex in self.column_categories_to_search_regexes.items()}
         self.categorize_data_by_column()
 
@@ -362,7 +369,7 @@ class LSFFOutputSummarizer():
         # If an extraction dictionary was passed, update the current dictionary with it
         if column_categories_to_extraction_regexes is not None:
             self.column_categories_to_extraction_regexes.update(column_categories_to_extraction_regexes)
-            
+
 #         if column_categories_to_extraction_regexes is not None:
 #             self.column_categories_to_extraction_regexes = column_categories_to_extraction_regexes
 #         elif self.column_categories_to_extraction_regexes is None:
@@ -370,9 +377,9 @@ class LSFFOutputSummarizer():
 
         for category, extraction_regex in self.column_categories_to_extraction_regexes.items():
 #             print(category)
-#             column_decompositions = self.subdata[category].columns.str.extract(extraction_regex)
+#             column_decompositions = self._subdata[category].columns.str.extract(extraction_regex)
             column_decompositions = self._columns[category].columns.str.extract(extraction_regex)
 #             print(column_decompositions)
             # Note: pd.MultiIndex.from_frame() requires pandas 0.24 or higher. If using version 0.23 or lower, instead use:
             # pd.MultiIndex.from_tuples(column_decomposition.itertuples(index=False), names=column_decomposition.columns)
-            self.subdata[category].columns = pd.MultiIndex.from_frame(column_decompositions.dropna(axis=1, how='all'))
+            self._subdata[category].columns = pd.MultiIndex.from_frame(column_decompositions.dropna(axis=1, how='all'))
