@@ -15,6 +15,10 @@ INTERVENTION_COLUMN_CATEGORY = 'intervention'
 # Categories to group by when aggregating over random seeds
 INDEX_COLUMN_CATEGORIES = (LOCATION_COLUMN_CATEGORY, INTERVENTION_COLUMN_CATEGORY, INPUT_DRAW_COLUMN_CATEGORY)
 
+# Count-space columns
+BIRTH_PREVALENCE_COLUMN_CATEGORY = 'birth_prevalence'
+LIVE_BIRTHS_COLUMN_CATEGORY = 'live_births'
+
 # Non-count-space columns
 PROPORTION_COLUMN_CATEGORY = 'proportion'
 DISTRIBUTION_MEAN_COLUMN_CATEGORY = 'distribution_mean'
@@ -69,9 +73,11 @@ def default_column_categories_to_search_regexes():
         'yll': r'^ylls_due_to_', # YLL columns start with 'ylls_due_to_'
         'categorical_risk': r'_cat\d+_exposed', # columns for categorical risk exposures contain, e.g. '_cat16_exposed'
         'graded_sequela': r'mild|moderate|severe|unexposed', # anemia, for example
+        BIRTH_PREVALENCE_COLUMN_CATEGORY: r'born_with',
+        LIVE_BIRTHS_COLUMN_CATEGORY: r'live_births',
         PROPORTION_COLUMN_CATEGORY: r'_proportion',
-        DISTRIBUTION_MEAN_COLUMN_CATEGORY: r'_mean_', # mean of a distribution
-        DISTRIBUTION_STD_DEV_COLUMN_CATEGORY: r'_sd_', # standard deviation of a distribution
+        DISTRIBUTION_MEAN_COLUMN_CATEGORY: r'_mean', # mean of a distribution
+        DISTRIBUTION_STD_DEV_COLUMN_CATEGORY: r'_sd', # standard deviation of a distribution
         'prevalence': r'prevalent_count', # prevalent count of a cause, e.g. 'prevalent_count_at_birth'
     }
 
