@@ -5,7 +5,7 @@ INDEX_COLUMNS = ['input_draw', 'scenario']
 def conditional_risk_of_ntds(
     births_with_ntd: pd.DataFrame, 
     live_births: pd.DataFrame, 
-    conditioned_on=['fortification_group']: list,
+    conditioned_on: list,
     multiplier=1) -> pd.DataFrame:
     """
     Returns a dataframe with the contitional risk of neural tube defects
