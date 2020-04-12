@@ -3,6 +3,18 @@ import pandas as pd
 INDEX_COLUMNS = ['input_draw', 'scenario']
 VALUE_COLUMN = 'value'
 
+def set_global_index_columns(index_columns:list)->None:
+    """
+    Set INDEX_COLUMNS to a custom list of columns for the Vivarium model output.
+    For example, if tables for different locations have been concatenated with
+    a new column called 'location', then use the following to get the correct
+    behavior for the functions in this module:
+    
+    set_global_index_columns(['location']+lsff_output_processing.INDEX_COLUMNS)
+    """
+    global INDEX_COLUMNS
+    INDEX_COLUMNS = index_columns
+
 def conditional_risk_of_ntds(
     births_with_ntd: pd.DataFrame, 
     live_births: pd.DataFrame, 
@@ -36,7 +48,8 @@ def conditional_risk_of_ntds(
 
 def rate_or_ratio(numerator, denominator,
                   numerator_strata, denominator_strata,
-                  multiplier=1
+                  multiplier=1,
+                  dropna=False
                  ):
     index_cols = INDEX_COLUMNS
     
@@ -52,6 +65,10 @@ def rate_or_ratio(numerator, denominator,
     denominator = denominator.groupby(denominator_strata+index_cols).value.sum()
     
     rate_or_ratio = multiplier * numerator / denominator
+    
+    # If dropna is True, drop rows where we divided by 0
+    if dropna:
+        rate_or_ratio.dropna(inplace=True)
     
     return rate_or_ratio.reset_index()
 
