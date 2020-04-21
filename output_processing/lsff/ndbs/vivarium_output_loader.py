@@ -100,6 +100,7 @@ def load_transformed_count_data_and_merge_locations(directory, locations_rundate
    
     for location_dfs in location_dictionaries[1:]:
         for table_name, table in location_dfs.items():
-            data_dict[table_name].append(table)
+            data_dict[table_name] = data_dict[table_name].append(table)
             
     return data_dict
+
