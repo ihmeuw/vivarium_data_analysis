@@ -49,17 +49,21 @@ def conditional_risk_of_ntds(
 def rate_or_ratio(numerator, denominator,
                   numerator_strata, denominator_strata,
                   multiplier=1,
+                  broadcast_cols=None,
                   dropna=False
                  ):
     index_cols = INDEX_COLUMNS
     
     # When we divide, the numerator strata must contain the denominator strata,
     # and the difference is the columns to broadcast over.
+    
+    if broadcast_cols is None:
+        broadcast_cols = []
 
     broadcast_cols = sorted(
         set(numerator_strata) - set(denominator_strata),
         key=numerator_strata.index
-    )
+    ) + broadcast_cols
     
     numerator = numerator.groupby(denominator_strata+index_cols+broadcast_cols).value.sum()
     denominator = denominator.groupby(denominator_strata+index_cols).value.sum()
