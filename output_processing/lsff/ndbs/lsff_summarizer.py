@@ -16,6 +16,8 @@ INTERVENTION_COLUMN_CATEGORY = 'intervention'
 INDEX_COLUMN_CATEGORIES = (LOCATION_COLUMN_CATEGORY, INTERVENTION_COLUMN_CATEGORY, INPUT_DRAW_COLUMN_CATEGORY)
 
 # Count-space columns
+PERSON_TIME_COLUMN_CATEGORY = 'person_time'
+STATE_PERSON_TIME_COLUMN_CATEGORY = 'state_person_time'
 BIRTH_PREVALENCE_COLUMN_CATEGORY = 'birth_prevalence'
 LIVE_BIRTHS_COLUMN_CATEGORY = 'live_births'
 
@@ -65,14 +67,15 @@ def default_column_categories_to_search_regexes():
         'diseases_at_end': r'_prevalent_cases_at_sim_end$', # cause prevalence at end of simulation
         'transition_count': r'_event_count', # disease state transition events throughout simulation'
         'population': r'population', # population statistics at end of simulation
-        'person_time': r'person_time', # string contains 'person_time'
+        PERSON_TIME_COLUMN_CATEGORY: r'^person_time', # string starts with 'person_time'
+        STATE_PERSON_TIME_COLUMN_CATEGORY: r'_person_time', # string contains '_person_time'
         'treated_days': r'treated_days', # total number of days of treatment
         'mortality': r'^death_due_to_', # string starts with 'death_due_to_'
         'total_daly': r'^years_lived_with_disability$|^years_of_life_lost$', # sum of these 2 columns = DALYs for whole sim
         'yld': r'^ylds_due_to_', # YLD columns start with 'ylds_due_to_'
         'yll': r'^ylls_due_to_', # YLL columns start with 'ylls_due_to_'
         'categorical_risk': r'_cat\d+_exposed', # columns for categorical risk exposures contain, e.g. '_cat16_exposed'
-        'graded_sequela': r'mild|moderate|severe|unexposed', # anemia, for example
+#         'graded_sequela': r'mild|moderate|severe|unexposed', # anemia, for example
         BIRTH_PREVALENCE_COLUMN_CATEGORY: r'born_with',
         LIVE_BIRTHS_COLUMN_CATEGORY: r'live_births',
         PROPORTION_COLUMN_CATEGORY: r'_proportion',
