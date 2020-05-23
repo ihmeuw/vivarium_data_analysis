@@ -1,7 +1,10 @@
 import pandas as pd
 
-INDEX_COLUMNS = ['input_draw', 'scenario']
 VALUE_COLUMN = 'value'
+DRAW_COLUMN  = 'input_draw'
+SCENARIO_COLUMN = 'scenario'
+
+INDEX_COLUMNS = [DRAW_COLUMN, SCENARIO_COLUMN]
 
 def set_global_index_columns(index_columns:list)->None:
     """
@@ -65,8 +68,8 @@ def rate_or_ratio(numerator, denominator,
         key=numerator_strata.index
     ) + broadcast_cols
     
-    numerator = numerator.groupby(denominator_strata+index_cols+broadcast_cols).value.sum()
-    denominator = denominator.groupby(denominator_strata+index_cols).value.sum()
+    numerator = numerator.groupby(denominator_strata+index_cols+broadcast_cols)[VALUE_COLUMN].sum()
+    denominator = denominator.groupby(denominator_strata+index_cols)[VALUE_COLUMN].sum()
     
     rate_or_ratio = multiplier * numerator / denominator
     
@@ -76,17 +79,32 @@ def rate_or_ratio(numerator, denominator,
     
     return rate_or_ratio.reset_index()
 
-def averted(measure, scenario_col, baseline_value):
-    baseline = measure[measure[scenario_col] == baseline_value]
-    intervention = measure[measure[scenario_col] != baseline_value]
+def averted(measure, baseline_scenario, scenario_col=None):
     
-    index_columns = list(set(baseline.columns) - set([scenario_col, 'value']))
+    scenario_col = SCENARIO_COLUMN if scenario_col is None else scenario_col
+    
+    baseline = measure[measure[scenario_col] == baseline_scenario]
+    intervention = measure[measure[scenario_col] != baseline_scenario]
+    
+    # Columns to match when subtracting intervention from baseline
+    index_columns = sorted(set(baseline.columns) - set([scenario_col, VALUE_COLUMN]),
+                           key=baseline.columns.get_loc)
 #     print(index_columns)
     
-    baseline = baseline.set_index(index_columns).value
-    intervention = intervention.set_index(index_columns).value
+    # Put the scenario column in the index of intervention but not baseline.
+    # When we subtract, this will broadcast over different interventions if there are more than one.
+    baseline = baseline.set_index(index_columns)
+    intervention = intervention.set_index(index_columns+[scenario_col])
     
-    # This will broadcast over different interventions if there are more than one
-    averted = baseline - intervention
+    # Get the averted values
+    averted = baseline[VALUE_COLUMN] - intervention[VALUE_COLUMN]
     
-    return averted.reset_index()
+    # Add a column to record what the baseline scenario was
+    averted = averted.reset_index()
+    averted.insert(averted.columns.get_loc(scenario_col)+1, 'relative_to', baseline_scenario)
+    
+    return averted
+
+def describe(data, **describe_kwargs):
+    groupby_cols = [col for col in data.columns if col not in [DRAW_COLUMN, VALUE_COLUMN]]
+    return data.groupby(groupby_cols)[VALUE_COLUMN].describe(**describe_kwargs)
