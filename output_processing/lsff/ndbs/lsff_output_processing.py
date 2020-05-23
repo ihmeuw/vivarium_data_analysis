@@ -55,14 +55,60 @@ def rate_or_ratio(numerator, denominator,
                   broadcast_cols=None,
                   dropna=False
                  ):
-    index_cols = INDEX_COLUMNS
+    """
+    Compute a rate or ratio by dividing the numerator by the denominator.
     
-    # When we divide, the numerator strata must contain the denominator strata,
-    # and the difference is the columns to broadcast over.
+    Parameters
+    ----------
+    
+    numerator : DataFrame
+        The numerator data for the rate or ratio.
+        
+    denominator : DataFrame
+        The denominator data for the rate or ratio.
+        
+    numerator_strata : list of column names in numerator, or an empty list
+        Stratification variables to include in the numerator.
+        Strata in the denominator are automatically added to this list
+        since the population in the numerator must always be a subset of
+        the population in the denominator. (Thus an empty list [] defaults
+        to denominator_strata.)
+        
+     denominator_strata : list of column names in denominator
+         Stratification variables to include in the denominator.
+         These will automatically be added to numerator_strata.
+         
+     multiplier : int or float, default 1
+         Multiplier for the numerator, typically a power of 10,
+         to adjust the units of the result. For example, if computing a ratio,
+         some multipliers with corresponding units are:
+         1 - proportion
+         100 - percent
+         1000 - per 1000
+         100_000 - per hundred thousand
+         
+     broadcast_cols : list of column names in numerator
+         Columns in the numerator over which to broadcast. E.g. 'cause' to
+         compute a rate or ratio for multiple causes at once, or 'measure'
+         to compute a rate or ratio for multiple measures at once (like
+         deaths, ylls, and ylds).
+         
+     dropna : boolean, default False
+         Whether to drop rows with NaN values in the result, namely
+         if division by 0 occurs because of an empty stratum in the denominator.
+         
+     Returns
+     -------
+     rate_or_ratio : DataFrame
+         The rate or ratio data = numerator / denominator.
+    """
+    index_cols = INDEX_COLUMNS
     
     if broadcast_cols is None:
         broadcast_cols = []
 
+    # When we divide, the numerator strata must contain the denominator strata,
+    # and the difference is the columns to broadcast over.
     broadcast_cols = sorted(
         set(numerator_strata) - set(denominator_strata),
         key=numerator_strata.index
@@ -80,9 +126,34 @@ def rate_or_ratio(numerator, denominator,
     return rate_or_ratio.reset_index()
 
 def averted(measure, baseline_scenario, scenario_col=None):
+    """
+    Compute an "averted" measure (e.g. DALYs) or measures by subtracting
+    the intervention value from the baseline value.
+    
+    Parameters
+    ----------
+    
+    measure : DataFrame
+        DataFrame containing both the baseline and intervention data.
+        
+    baseline_scenario : scalar, typically str
+        The name or other identifier for the baseline scenario in the
+        `scenario_col` column of the `measure` DataFrame.
+        
+    scenario_col : str, default None
+        The name of the scenario column in the `measure` DataFrame.
+        Defaults to the global parameter SCENARIO_COLUMN if None is passed.
+        
+    Returns
+    -------
+    
+    averted : DataFrame
+        The averted measure(s) = baseline - intervention
+    """
     
     scenario_col = SCENARIO_COLUMN if scenario_col is None else scenario_col
     
+    # Filter to create separate dataframes for baseline and intervention
     baseline = measure[measure[scenario_col] == baseline_scenario]
     intervention = measure[measure[scenario_col] != baseline_scenario]
     
@@ -99,12 +170,13 @@ def averted(measure, baseline_scenario, scenario_col=None):
     # Get the averted values
     averted = baseline[VALUE_COLUMN] - intervention[VALUE_COLUMN]
     
-    # Add a column to record what the baseline scenario was
+    # Insert a column after the scenario column to record what the baseline scenario was
     averted = averted.reset_index()
     averted.insert(averted.columns.get_loc(scenario_col)+1, 'relative_to', baseline_scenario)
     
     return averted
 
 def describe(data, **describe_kwargs):
+    """Wrapper function for .describe() with `data` grouped by everything except draw and value."""
     groupby_cols = [col for col in data.columns if col not in [DRAW_COLUMN, VALUE_COLUMN]]
     return data.groupby(groupby_cols)[VALUE_COLUMN].describe(**describe_kwargs)
