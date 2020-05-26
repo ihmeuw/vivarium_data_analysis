@@ -84,7 +84,7 @@ def rate_or_ratio(numerator, denominator,
          some multipliers with corresponding units are:
          1 - proportion
          100 - percent
-         1000 - per 1000
+         1000 - per thousand
          100_000 - per hundred thousand
          
      broadcast_cols : list of column names in numerator
@@ -177,6 +177,6 @@ def averted(measure, baseline_scenario, scenario_col=None):
     return averted
 
 def describe(data, **describe_kwargs):
-    """Wrapper function for .describe() with `data` grouped by everything except draw and value."""
+    """Wrapper function for DataFrame.describe() with `data` grouped by everything except draw and value."""
     groupby_cols = [col for col in data.columns if col not in [DRAW_COLUMN, VALUE_COLUMN]]
     return data.groupby(groupby_cols)[VALUE_COLUMN].describe(**describe_kwargs)
