@@ -17,7 +17,7 @@ def load_output_by_location(locations_paths: dict, output_filename='output.hdf')
     """
     # Read in data from different countries
     locations_outputs = {location: pd.read_hdf(os.path.join(path, output_filename))
-                                               for location, path in locactions_paths.items()}
+                                               for location, path in locations_paths.items()}
     
     for location, output in locations_outputs.items():
         output['location'] = location

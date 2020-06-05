@@ -24,6 +24,7 @@ LIVE_BIRTHS_COLUMN_CATEGORY = 'live_births'
 # Non-count-space columns
 PROPORTION_COLUMN_CATEGORY = 'proportion'
 DISTRIBUTION_MEAN_COLUMN_CATEGORY = 'distribution_mean'
+DISTRIBUTION_VARIANCE_COLUMN_CATEGORY = 'distribution_variance'
 DISTRIBUTION_STD_DEV_COLUMN_CATEGORY = 'distribution_std_dev'
 
 # Column to store counts of random seeds in groupby
@@ -60,7 +61,7 @@ def default_column_categories_to_search_regexes():
         INPUT_DRAW_COLUMN_CATEGORY: r'input_draw',
         RANDOM_SEED_COLUMN_CATEGORY: r'random_seed',
         LOCATION_COLUMN_CATEGORY: r'location', # any column containing the string 'location'
-        INTERVENTION_COLUMN_CATEGORY: r'\w+\.\w+', # columns look like 'intervention_name.paramater'. Parameters determine scenario.
+        INTERVENTION_COLUMN_CATEGORY: r'\w*\D\.\w+', # columns look like 'intervention_name.paramater'. Parameters determine scenario.
         # Metadata about the simulation runs
         'run_time': r'run_time', # simulation run time
         # Data about the simulation results
@@ -80,6 +81,7 @@ def default_column_categories_to_search_regexes():
         LIVE_BIRTHS_COLUMN_CATEGORY: r'live_births',
         PROPORTION_COLUMN_CATEGORY: r'_proportion',
         DISTRIBUTION_MEAN_COLUMN_CATEGORY: r'_mean', # mean of a distribution
+        DISTRIBUTION_VARIANCE_COLUMN_CATEGORY: r'_variance', # variance of a distribution
         DISTRIBUTION_STD_DEV_COLUMN_CATEGORY: r'_sd', # standard deviation of a distribution
         'prevalence': r'prevalent_count', # prevalent count of a cause, e.g. 'prevalent_count_at_birth'
     }
