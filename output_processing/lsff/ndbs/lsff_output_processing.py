@@ -180,3 +180,10 @@ def describe(data, **describe_kwargs):
     """Wrapper function for DataFrame.describe() with `data` grouped by everything except draw and value."""
     groupby_cols = [col for col in data.columns if col not in [DRAW_COLUMN, VALUE_COLUMN]]
     return data.groupby(groupby_cols)[VALUE_COLUMN].describe(**describe_kwargs)
+
+def get_mean_lower_upper(described_data, colname_mapper={'mean':'mean', '2.5%':'lower', '97.5%':'upper'}):
+    """
+    Gets the mean, lower, and upper value from `described_data` DataFrame, which is assumed to have
+    the format resulting from a call to DataFrame.describe().
+    """
+    return described_data[colname_mapper.keys()].rename(columns=colname_mapper).reset_index()
