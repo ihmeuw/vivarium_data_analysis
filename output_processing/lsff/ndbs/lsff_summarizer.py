@@ -172,6 +172,9 @@ class LSFFOutputSummarizer():
         # Initializes self._subdata,
         # self.found_columns, self.missing_columns, self.repeated_columns, self.empty_categories:
         self.categorize_data_by_column(column_categories_to_search_regexes)
+        
+        self.input_draws = self._subdata[INPUT_DRAW_COLUMN_CATEGORY].squeeze().unique()
+        self.random_seeds = self._subdata[RANDOM_SEED_COLUMN_CATEGORY].squeeze().unique()
 
     def categorize_data_by_column(self, column_categories_to_search_regexes=None):
         """Categorize the columns in the data to make sure we don't miss anything or overcount"""
@@ -239,6 +242,32 @@ class LSFFOutputSummarizer():
         print(f"\nEmpty categories ({len(self.empty_categories)} categories with no matching data columns):\n",
               self.empty_categories)
 
+    def random_seed_counts(self, index_columns=None):
+        """Get a dataframe displaying the number of random seeds for each (location, draw, scenario)"""
+        if index_columns is None:
+            if self.index_column_categories is not None:
+                index_columns = self.columns(*self.index_column_categories)
+            else:
+                index_columns = self.columns(*INDEX_COLUMN_CATEGORIES)
+        random_seeds = self.data[index_columns + self.columns(RANDOM_SEED_COLUMN_CATEGORY)]
+        return random_seeds.groupby(index_columns).count()
+    
+    def print_random_seed_report(self):
+        """Print information to indicate whether it looks like any random seeds are missing in the output."""
+        print(f'Shape of output: {self.data.shape}')
+        locations = self.subdata(LOCATION_COLUMN_CATEGORY).squeeze().unique()
+        print(f'Locations in output: {locations}')
+        print(f'{len(self.input_draws)} input draws found: {sorted(self.input_draws)}')
+        print(f'{len(self.random_seeds)} random seeds found: {sorted(self.random_seeds)}')
+        
+        seed_counts = self.random_seed_counts()
+        non_scenario_columns = self.columns(LOCATION_COLUMN_CATEGORY, INPUT_DRAW_COLUMN_CATEGORY)
+        scenarios = seed_counts.reset_index(non_scenario_columns).index.to_flat_index().unique()
+        print(f'{len(scenarios)} scenarios found: {list(scenarios)}')
+        print(f'Number of (location, draw, scenario) tuples: {len(seed_counts.index)}')
+        print(f'Random seed count == {len(self.random_seeds)} for each (location, draw, scenario)?',
+              np.allclose(seed_counts, len(self.random_seeds)))
+    
     def column_category_counts(self):
         """Get a dictionary mapping column categories to the number of columns found in that category."""
         return {category: len(cat_data.columns) for category, cat_data in self._subdata.items()}
