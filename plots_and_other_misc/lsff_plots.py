@@ -68,14 +68,14 @@ def add_national_estimates(coverage_df):
     coverage_df['Nigeria'] = kano_weight*coverage_df['Nigeria (Kano)'] + lagos_weight*coverage_df['Nigeria (Lagos)']
     
 def get_coverage_dfs():
-    """Get the flour and oil coverage dataframes with the national estimates added."""
+    """Get a dictionary containing the flour and oil coverage dataframes with the national estimates added."""
     flour_df = get_raw_flour_coverage_df()
     oil_df = get_raw_oil_coverage_df()
     
     add_national_estimates(flour_df)
     add_national_estimates(oil_df)
     
-    return flour_df, oil_df
+    return {'flour': flour_df, 'oil': oil_df}
 
 def coverage(t, a, b, c, t_start=1, r=0.1):
     """
