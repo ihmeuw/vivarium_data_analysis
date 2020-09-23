@@ -17,6 +17,8 @@ Ethiopian Federal Ministry of Health. Assessment of Feasibility and
 
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
 
+### Coverage function ###
+
 def get_raw_flour_coverage_df():
     """
     Returns a dataframe with the flour fortification coverage data.
@@ -66,14 +68,14 @@ def add_national_estimates(coverage_df):
     coverage_df['Nigeria'] = kano_weight*coverage_df['Nigeria (Kano)'] + lagos_weight*coverage_df['Nigeria (Lagos)']
     
 def get_coverage_dfs():
-    """Get the flour and oil coverage dataframes with the national estimates added."""
+    """Get a dictionary containing the flour and oil coverage dataframes with the national estimates added."""
     flour_df = get_raw_flour_coverage_df()
     oil_df = get_raw_oil_coverage_df()
     
     add_national_estimates(flour_df)
     add_national_estimates(oil_df)
     
-    return flour_df, oil_df
+    return {'flour': flour_df, 'oil': oil_df}
 
 def coverage(t, a, b, c, t_start=1, r=0.1):
     """
@@ -141,3 +143,28 @@ def make_coverage_plots():
         plot_coverage(ax, 2020, 2025, 2021, locations, df, vehicle)
 
     fig.tight_layout()
+
+### Hemoglobin effect size ###
+ 
+def hb_age_fraction(age):
+    """
+    Multiplier on Hb effect size due to children eating less food at younger
+    ages. (`age` is current age in years).
+    """
+#     return 0 if age<0.5 else (age-0.5)/1.5 if age<2 else 1 # scalar version
+    return np.select([age>2, age>0.5], [1, (age-0.5)/1.5]) # default=0 when both conditions are false
+
+def hb_lag_fraction(time_since_fortified):
+    """
+    Multiplier on Hb effect size due to lag in response time to iron fortification.
+    The argument `time_since_fortified` is the time (in years) since a simulant
+    started eating fortified food (note that a negative value of `time_since_fortified`
+    indicates the child has not yet started eating fortified food).
+    """
+# # scalar version:
+#     return (0                         if time_since_fortified < 0   else
+#           time_since_fortified/0.5  if time_since_fortified < 0.5 else
+#           1)
+    # vectorized version (default=0 when both conditions are false):
+    return np.select([time_since_fortified > 0.5, time_since_fortified > 0], [1, time_since_fortified/0.5])
+
