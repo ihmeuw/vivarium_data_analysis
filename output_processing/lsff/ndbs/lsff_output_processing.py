@@ -160,18 +160,22 @@ def averted(measure, baseline_scenario, scenario_col=None):
     # Columns to match when subtracting intervention from baseline
     index_columns = sorted(set(baseline.columns) - set([scenario_col, VALUE_COLUMN]),
                            key=baseline.columns.get_loc)
-#     print(index_columns)
+    print(index_columns)
     
     # Put the scenario column in the index of intervention but not baseline.
     # When we subtract, this will broadcast over different interventions if there are more than one.
     baseline = baseline.set_index(index_columns)
     intervention = intervention.set_index(index_columns+[scenario_col])
+    print('baseline index:', baseline.index.names)
+    print('intervention index:', intervention.index.names)
     
     # Get the averted values
     averted = baseline[VALUE_COLUMN] - intervention[VALUE_COLUMN]
+    print('averted index:', averted.index.names)
     
     # Insert a column after the scenario column to record what the baseline scenario was
     averted = averted.reset_index()
+    print(averted.columns)
     averted.insert(averted.columns.get_loc(scenario_col)+1, 'relative_to', baseline_scenario)
     
     return averted
