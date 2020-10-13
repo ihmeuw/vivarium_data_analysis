@@ -2,6 +2,7 @@
 Module to facilitate using GBD id's in the shared functions.
 """
 from db_queries import get_ids
+from pandas import DataFrame
 
 # The following list of valid entities was retrieved on 2020-10-12 from the hosted documentation:
 # https://scicomp-docs.ihme.washington.edu/db_queries/current/get_ids.html
@@ -36,10 +37,16 @@ entities = [
  'year'
 ]
 
+def get_entities():
+    """Returns the entities listed as valid arguments to `get_ids()` in the online documentation on 2020-10-12.
+    https://scicomp-docs.ihme.washington.edu/db_queries/current/get_ids.html
+    """
+    return entities
+
 def get_entities_from_docstring():
     """Returns the entities listed as valid arguments in the docstring of `get_ids()`.
     Currently there are only 22 entities listed in the docstring, whereas 28 entities are listed
-    in the online documentation; those are accessible as id_helper.entities.
+    in the online documentation; those are accessible via get_entities().
     """
     docstring = get_ids.__doc__
     # This simplistic solution works with the current version, but it may need to be updated
@@ -89,30 +96,89 @@ def ids_to_names(entity, *entity_ids):
         ids[entity_name_col] = ids['year_id']
     return ids.set_index(f'{entity}_id')[entity_name_col]
 
-def list_ids(entity, *entity_names):
-    """Returns a list of ids (or a single id) for the specified entity names, suitable for passing to GBD shared functions.""" 
-    # Converting from Series to list is necessary for all entities
-    # Converting from numpy int64 to int is necessary at least for gbd_round
-    ids = [int(entity_id) for entity_id in names_to_ids(entity, *entity_names)]
+def process_singleton_ids(ids, entity):
+    """Returns a single id if len(ids)==1. If len(ids)>1, returns ids (assumed to be a list), or raises
+    a ValueError if the shared functions expect a single id rather than a list for the specified entity.
+    """
     if len(ids)==1:
         ids = ids[0]
-    elif entity=='gbd_round':
+    elif entity=='gbd_round': # Also version id's?
         raise ValueError("Only single gbd_round_id's are allowed in shared functions.")
     return ids
 
-def search_id_table(entity, pattern, **kwargs_for_contains):
-    """Searches an entity id table for entity names matching the specified pattern, using pandas.Series.str.contains()."""
-    ids = get_ids(entity)
-    return ids[ids[get_name_column(entity)].str.contains(pattern, **kwargs_for_contains)]
+def list_ids(entity, *entity_names):
+    """Returns a list of ids (or a single id) for the specified entity names,
+    suitable for passing to GBD shared functions.
+    """
+    # Converting from Series to list is necessary for all entities
+    # Converting from numpy int64 to int is necessary at least for gbd_round
+#     ids = [int(entity_id) for entity_id in names_to_ids(entity, *entity_names)]
+    ids = names_to_ids(entity, *entity_names).to_list()
+#     if len(ids)==1:
+#         ids = ids[0]
+#     elif entity=='gbd_round':
+#         raise ValueError("Only single gbd_round_id's are allowed in shared functions.")
+    ids = process_singleton_ids(ids, entity)
+    return ids
 
-def find_ids(entity, pattern, **kwargs_for_contains):
+def get_entity_and_id_colname(table):
+    """Returns the entity and entity id column name from an id table,
+    assuming the entity id column name is f'{entity}_id',
+    and that this is the only column ending in '_id'.
+    """
+    id_colname = table.columns[table.columns.str.contains(r'\w+_id$')][0]
+    entity = id_colname[:-3]
+    return entity, id_colname
+
+def get_entity(table):
+    """Returns the entity represented by a given id table,
+    assuming the id column name is f'{entity}_id'.
+    """
+    return get_entity_and_id_colname(table)[0]
+
+def get_id_colname(table):
+    """Returns the entity id column name in the given id table,
+    assuming it is the only column name that ends with '_id'.
+    """
+    return get_entity_and_id_colname(table)[1]
+
+def ids_in(table):
+    """Returns the ids in the given dataframe, either as a list of ints or a single int."""
+#     ids = [int(entity_id) for entity_id in table[get_id_colname(table)]]
+    entity, id_colname = get_entity_and_id_colname(table)
+    ids = table[id_colname].to_list()
+#     if len(ids)==1:
+#         ids = ids[0]
+#     elif entity=='gbd_round':
+#         raise ValueError("Only single gbd_round_id's are allowed in shared functions.")
+    ids = process_singleton_ids(ids, entity)
+    return ids
+
+def search_id_table(table_or_entity, pattern, search_col=None, return_all_columns=False, **kwargs_for_contains):
+    """Searches an entity id table for entity names matching the specified pattern, using pandas.Series.str.contains()."""
+    if type(table_or_entity)==DataFrame:
+        df = table_or_entity
+        entity = get_entity(df)
+    elif type(table_or_entity)==str:
+        entity = table_or_entity
+        df = get_ids(entity, return_all_columns)
+    else:
+        raise TypeError(f'Expecting type `pandas.DataFrame` or `str` for `table_or_entity`. Got type {type(table_or_entity)}.')
+
+    if search_col is None:
+        search_col = get_name_column(entity)
+
+    return df[df[search_col].str.contains(pattern, **kwargs_for_contains)]
+
+def find_ids(table_or_entity, pattern, search_col=None, return_all_columns=False, **kwargs_for_contains):
     """Searches an entity id table for entity names matching the specified pattern, using pandas.Series.str.contains(),
     and returns a list of ids (or a single id) for the specified entity names, suitable for passing to GBD shared functions.
     """
-    ids = search_id_table(entity, pattern, **kwargs_for_contains)
-    ids = [int(entity_id) for entity_id in ids[f'{entity}_id']]
-    if len(ids)==1:
-        ids = ids[0]
-    elif entity=='gbd_round':
-        raise ValueError("Only single gbd_round_id's are allowed in shared functions.")
-    return ids
+    df = search_id_table(table_or_entity, pattern, search_col=None, return_all_columns=False, **kwargs_for_contains)
+    return ids_in(df)
+#     ids = [int(entity_id) for entity_id in ids[f'{entity}_id']]
+#     if len(ids)==1:
+#         ids = ids[0]
+#     elif entity=='gbd_round':
+#         raise ValueError("Only single gbd_round_id's are allowed in shared functions.")
+#     return ids
