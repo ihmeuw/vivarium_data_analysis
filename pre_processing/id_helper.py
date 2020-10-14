@@ -6,7 +6,7 @@ from pandas import DataFrame
 
 # The following list of valid entities was retrieved on 2020-10-12 from the hosted documentation:
 # https://scicomp-docs.ihme.washington.edu/db_queries/current/get_ids.html
-entities = [
+_entities = [
  'age_group',
  'age_group_set',
  'cause',
@@ -41,7 +41,7 @@ def get_entities():
     """Returns the entities listed as valid arguments to `get_ids()` in the online documentation on 2020-10-12.
     https://scicomp-docs.ihme.washington.edu/db_queries/current/get_ids.html
     """
-    return entities
+    return _entities
 
 def get_entities_from_docstring():
     """Returns the entities listed as valid arguments in the docstring of `get_ids()`.
@@ -72,6 +72,8 @@ def get_name_column(entity):
     else:
         return f'{entity}_name'
 
+# Should this have a parameter to optionally igonre NaN's?
+# See comment for ids_to_names below
 def names_to_ids(entity, *entity_names):
     """Returns a pandas Series mapping entity names to entity id's for the specified GBD entity."""
     ids = get_ids(entity)
@@ -84,6 +86,8 @@ def names_to_ids(entity, *entity_names):
         ids[entity_name_col] = ids['year_id']
     return ids.set_index(entity_name_col)[f'{entity}_id']
 
+# Should this have a parameter to optionally igonre NaN's?
+# I got an error when I tried to pass entity_ids directly from a DataFrame that contained NaN's
 def ids_to_names(entity, *entity_ids):
     """Returns a pandas Series mapping entity id's to entity names for the specified GBD entity."""
     ids = get_ids(entity)
@@ -110,21 +114,16 @@ def list_ids(entity, *entity_names):
     """Returns a list of ids (or a single id) for the specified entity names,
     suitable for passing to GBD shared functions.
     """
-    # Converting from Series to list is necessary for all entities
-    # Converting from numpy int64 to int is necessary at least for gbd_round
-#     ids = [int(entity_id) for entity_id in names_to_ids(entity, *entity_names)]
+    # Series.to_list() converts to a list of Python int rather than numpy.int64
+    # Conversion to the list type and the int type are both necessary for the shared functions
     ids = names_to_ids(entity, *entity_names).to_list()
-#     if len(ids)==1:
-#         ids = ids[0]
-#     elif entity=='gbd_round':
-#         raise ValueError("Only single gbd_round_id's are allowed in shared functions.")
     ids = process_singleton_ids(ids, entity)
     return ids
 
 def get_entity_and_id_colname(table):
     """Returns the entity and entity id column name from an id table,
     assuming the entity id column name is f'{entity}_id',
-    and that this is the only column ending in '_id'.
+    and that this is the first (or only) column ending in '_id'.
     """
     id_colname = table.columns[table.columns.str.contains(r'\w+_id$')][0]
     entity = id_colname[:-3]
@@ -132,25 +131,23 @@ def get_entity_and_id_colname(table):
 
 def get_entity(table):
     """Returns the entity represented by a given id table,
-    assuming the id column name is f'{entity}_id'.
+    assuming the id column name is f'{entity}_id',
+    and that this is the first (or only) column ending in '_id'.
     """
     return get_entity_and_id_colname(table)[0]
 
 def get_id_colname(table):
     """Returns the entity id column name in the given id table,
-    assuming it is the only column name that ends with '_id'.
+    assuming it is the first (or only) column name that ends with '_id'.
     """
     return get_entity_and_id_colname(table)[1]
 
 def ids_in(table):
     """Returns the ids in the given dataframe, either as a list of ints or a single int."""
-#     ids = [int(entity_id) for entity_id in table[get_id_colname(table)]]
     entity, id_colname = get_entity_and_id_colname(table)
+    # Series.to_list() converts to a list of Python int rather than numpy.int64
+    # Conversion to the list type and the int type are both necessary for the shared functions
     ids = table[id_colname].to_list()
-#     if len(ids)==1:
-#         ids = ids[0]
-#     elif entity=='gbd_round':
-#         raise ValueError("Only single gbd_round_id's are allowed in shared functions.")
     ids = process_singleton_ids(ids, entity)
     return ids
 
@@ -176,9 +173,3 @@ def find_ids(table_or_entity, pattern, search_col=None, return_all_columns=False
     """
     df = search_id_table(table_or_entity, pattern, search_col=None, return_all_columns=False, **kwargs_for_contains)
     return ids_in(df)
-#     ids = [int(entity_id) for entity_id in ids[f'{entity}_id']]
-#     if len(ids)==1:
-#         ids = ids[0]
-#     elif entity=='gbd_round':
-#         raise ValueError("Only single gbd_round_id's are allowed in shared functions.")
-#     return ids
