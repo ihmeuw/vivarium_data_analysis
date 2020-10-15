@@ -72,8 +72,14 @@ def get_name_column(entity):
     else:
         return f'{entity}_name'
 
-# Should this have a parameter to optionally igonre NaN's?
-# See comment for ids_to_names below
+# Should this have a parameter to optionally igonre NaN's? See comment for ids_to_names below.
+# Other possible parameters:
+#   allow duplicate names (True - list all id's that match the name, False - raise an exception)
+#   deal with missing names (omit names that aren't in database, raise KeyError, fill with NaN)
+# Also, it may be useful to enable passing a DataFrame instead of an entity,
+# so that it's possible to filter the database first to avoid multiple matching names.
+# Ok, I think I can get all the desired options by right-merging the names onto the id dataframe,
+# then using logic on the options to remove things or raise exceptions as necessary.
 def names_to_ids(entity, *entity_names):
     """Returns a pandas Series mapping entity names to entity id's for the specified GBD entity."""
     ids = get_ids(entity)
@@ -87,11 +93,15 @@ def names_to_ids(entity, *entity_names):
     return ids.set_index(entity_name_col)[f'{entity}_id']
 
 # Should this have a parameter to optionally igonre NaN's?
-# I got an error when I tried to pass entity_ids directly from a DataFrame that contained NaN's
+# I got an error when I tried to pass entity_ids directly from a DataFrame that contained NaN's.
+# Other possible parameters:
+#   allow duplicate id's (True - list matching id's times, False - raise an exception)
+#   deal with missing ids (omit id's that aren't in database, raise KeyError, fill with NaN)
 def ids_to_names(entity, *entity_ids):
     """Returns a pandas Series mapping entity id's to entity names for the specified GBD entity."""
     ids = get_ids(entity)
     if len(entity_ids)>0:
+        # I think this raises an exception (KeyError and/or UndefinedVariableError) if entity_ids contains NaN
         ids = ids.query(f'{entity}_id in {entity_ids}')
     entity_name_col = get_name_column(entity)
     # Year table only has one column, so we copy it
@@ -160,7 +170,7 @@ def search_id_table(table_or_entity, pattern, search_col=None, return_all_column
         entity = table_or_entity
         df = get_ids(entity, return_all_columns)
     else:
-        raise TypeError(f'Expecting type `pandas.DataFrame` or `str` for `table_or_entity`. Got type {type(table_or_entity)}.')
+        raise TypeError(f'Expecting type {DataFrame} or {str} for `table_or_entity`. Got type {type(table_or_entity)}.')
 
     if search_col is None:
         search_col = get_name_column(entity)
