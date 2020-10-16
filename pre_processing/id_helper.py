@@ -1,8 +1,9 @@
 """
 Module to facilitate using GBD id's in the shared functions.
 """
-from db_queries import get_ids
-from pandas import DataFrame
+# prepend imports with underscores so they don't show up if id_helper module is imported using import *
+from db_queries import get_ids as _get_ids
+from pandas import DataFrame as _DataFrame
 
 # The following list of valid entities was retrieved on 2020-10-12 from the hosted documentation:
 # https://scicomp-docs.ihme.washington.edu/db_queries/current/get_ids.html
@@ -48,14 +49,14 @@ def get_entities_from_docstring():
     Currently there are only 22 entities listed in the docstring, whereas 28 entities are listed
     in the online documentation; those are accessible via get_entities().
     """
-    docstring = get_ids.__doc__
+    docstring = _get_ids.__doc__
     # This simplistic solution works with the current version, but it may need to be updated
     # to a more robust solution if the docstring changes...
     return docstring[docstring.find('[')+1:docstring.find(']')].split()
 
 def find_anomalous_name_columns(entities):
     """Lists columns of entity tables that do not conatin a column called f'{entity}_name'."""
-    entities_columns = {entity: get_ids(entity).columns for entity in entities}
+    entities_columns = {entity: _get_ids(entity).columns for entity in entities}
     return {entity: columns for entity, columns in entities_columns.items() if f'{entity}_name' not in columns}
 
 def get_name_column(entity):
@@ -82,7 +83,7 @@ def get_name_column(entity):
 # then using logic on the options to remove things or raise exceptions as necessary.
 def names_to_ids(entity, *entity_names):
     """Returns a pandas Series mapping entity names to entity id's for the specified GBD entity."""
-    ids = get_ids(entity)
+    ids = _get_ids(entity)
     entity_name_col = get_name_column(entity)
     if len(entity_names)>0:
         ids = ids.query(f'{entity_name_col} in {entity_names}')
@@ -99,7 +100,7 @@ def names_to_ids(entity, *entity_names):
 #   deal with missing ids (omit id's that aren't in database, raise KeyError, fill with NaN)
 def ids_to_names(entity, *entity_ids):
     """Returns a pandas Series mapping entity id's to entity names for the specified GBD entity."""
-    ids = get_ids(entity)
+    ids = _get_ids(entity)
     if len(entity_ids)>0:
         # I think this raises an exception (KeyError and/or UndefinedVariableError) if entity_ids contains NaN
         ids = ids.query(f'{entity}_id in {entity_ids}')
@@ -135,7 +136,8 @@ def get_entity_and_id_colname(table):
     assuming the entity id column name is f'{entity}_id',
     and that this is the first (or only) column ending in '_id'.
     """
-    id_colname = table.columns[table.columns.str.contains(r'\w+_id$')][0]
+#     id_colname = table.columns[table.columns.str.contains(r'\w+_id$')][0]
+    id_colname = table.filter(regex=r'\w+_id$').columns[0]
     entity = id_colname[:-3]
     return entity, id_colname
 
@@ -163,14 +165,14 @@ def ids_in(table):
 
 def search_id_table(table_or_entity, pattern, search_col=None, return_all_columns=False, **kwargs_for_contains):
     """Searches an entity id table for entity names matching the specified pattern, using pandas.Series.str.contains()."""
-    if type(table_or_entity)==DataFrame:
+    if type(table_or_entity)==_DataFrame:
         df = table_or_entity
         entity = get_entity(df)
     elif type(table_or_entity)==str:
         entity = table_or_entity
-        df = get_ids(entity, return_all_columns)
+        df = _get_ids(entity, return_all_columns)
     else:
-        raise TypeError(f'Expecting type {DataFrame} or {str} for `table_or_entity`. Got type {type(table_or_entity)}.')
+        raise TypeError(f'Expecting type {_DataFrame} or {str} for `table_or_entity`. Got type {type(table_or_entity)}.')
 
     if search_col is None:
         search_col = get_name_column(entity)
