@@ -42,8 +42,9 @@ def compute_mean_stunting_prevalence_by_location(stunting_df):
     """Calculates mean stunting prevalence over 1000 draws for all locations in stunting_df,
     where stunting is defined as "height-for-age Z-score < -2 standard deviations".
     """
-    draw_cols = stunting_df.filter(regex=r'^draw_\d{1,3}$').columns # regex for 'draw_' followed by 1-3 digits
-    stunting_cat_cols = ['modelable_entity_id','parameter'] # each of these columns encodes the stunting category
+    # To illustrate regex syntax, this matches columns named 'draw_###', where ### consists of 1-3 digits
+    draw_cols = stunting_df.filter(regex=r'^draw_\d{1,3}$').columns # .filter(like='draw') would also suffice
+    stunting_cat_cols = ['modelable_entity_id','parameter'] # either of these columns identifies the stunting category
     index_cols = stunting_df.columns.difference(draw_cols).difference(stunting_cat_cols) # columns to group by
     unique_location_ids = stunting_df.location_id.unique() # record this to check shape later
 
@@ -70,7 +71,7 @@ def add_location_names_and_populations(stunting_df):
     locations = ids_to_names('location', *stunting_df.location_id.unique()).reset_index()
     stunting_df = stunting_df.merge(locations)
     population = get_population(
-        age_group_id=list(stunting_df.age_group_id.unique()),
+        age_group_id=list_ids('age_group', 'Under 5'),
         location_id=ids_in(locations),
         year_id=2019,
         gbd_round_id=list_ids('gbd_round', '2019'),
@@ -78,6 +79,23 @@ def add_location_names_and_populations(stunting_df):
         with_ui=False,
     )
     stunting_df = stunting_df.merge(population.drop(columns='run_id'))
+    stunting_df.rename(columns={'population':'population_under_5'}, inplace=True)
+    return stunting_df
+
+def format_stunting_dataframe(stunting_df):
+    """Removes extraneous id columns and reorders remaining columns."""
+    return stunting_df[['location_name', 'location_id', 'stunting_prevalence', 'population_under_5']]
+
+def compute_number_stunted_and_sort_descending(stunting_df):
+    """Adds a column for the number of children stunted in each country,
+    sorts by this column in descending order,
+    and changes the index to the rank of the location in descending order.
+    Modifies stunting_df in place.
+    """
+    stunting_df['number_stunted'] = stunting_df['stunting_prevalence'] * stunting_df['population_under_5']
+    stunting_df.sort_values('number_stunted', ascending=False, inplace=True)
+    stunting_df.index = range(1,len(stunting_df)+1)
+    stunting_df.index.rename('rank_2019_all', inplace=True)
     return stunting_df
 
 def clean_orig_country_data(filepath):
