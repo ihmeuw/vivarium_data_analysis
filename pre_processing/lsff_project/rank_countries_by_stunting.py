@@ -67,7 +67,7 @@ def compute_mean_stunting_prevalence_by_location(stunting_df):
     return stunting_df.reset_index() # converts back to DataFrame, with column named 'stunting_prevalence'
 
 def add_location_names_and_populations(stunting_df):
-    """Adds location names and populations for each location in `stunting_df`."""
+    """Adds location names and under-5 populations for each location in `stunting_df`."""
     locations = ids_to_names('location', *stunting_df.location_id.unique()).reset_index()
     stunting_df = stunting_df.merge(locations)
     population = get_population(
@@ -86,16 +86,58 @@ def format_stunting_dataframe(stunting_df):
     """Removes extraneous id columns and reorders remaining columns."""
     return stunting_df[['location_name', 'location_id', 'stunting_prevalence', 'population_under_5']]
 
-def compute_number_stunted_and_sort_descending(stunting_df):
+def compute_number_stunted_and_sort_descending(stunting_df, copy=False):
     """Adds a column for the number of children stunted in each country,
     sorts by this column in descending order,
     and changes the index to the rank of the location in descending order.
-    Modifies stunting_df in place.
+    Modifies stunting_df in place unless copy is set to True.
     """
+    if copy:
+        stunting_df = stunting_df.copy()
     stunting_df['number_stunted'] = stunting_df['stunting_prevalence'] * stunting_df['population_under_5']
     stunting_df.sort_values('number_stunted', ascending=False, inplace=True)
     stunting_df.index = range(1,len(stunting_df)+1)
     stunting_df.index.rename('rank_2019_all', inplace=True)
+    return stunting_df
+
+def compute_cumulative_number_stunted_and_percent_of_global_population(stunting_df, copy=False):
+    """Modifies stunting_df in place unless copy is set to True."""
+    if copy:
+        stunting_df = stunting_df.copy()
+    global_stunted_population = stunting_df['number_stunted'].sum()
+    stunting_df['cumulative_number_stunted'] = stunting_df['number_stunted'].cumsum()
+    stunting_df['cum_percent_global_stunted_pop'] = stunting_df['cumulative_number_stunted']/global_stunted_population
+    stunting_df['cum_percent_global_stunted_pop'] = (100*stunting_df['cum_percent_global_stunted_pop']).round(1)
+    return stunting_df
+
+def add_rank_and_cumulative_percent_for_cutoff(stunting_df, stunting_percent_cutoff, copy=False):
+    """"""
+    if copy:
+        stunting_df = stunting_df.copy()
+
+    percent_string=f'{stunting_percent_cutoff:.0f}' # save for reuse
+    # Add indicator column and rank
+    stunting_df[f'stunting_above_{percent_string}_percent'] = (
+        stunting_df['stunting_prevalence'] >= stunting_percent_cutoff/100
+    )
+    stunting_df[f'rank_2019_among_stunting_above_{percent_string}_percent'] = (
+        stunting_df[f'stunting_above_{percent_string}_percent'].cumsum()
+    )
+    # Add cumulative percent stunted among those with indicator==True
+    global_stunted_population = stunting_df['number_stunted'].sum()
+    cum_number_stunted = (stunting_df['number_stunted'] * stunting_df[f'stunting_above_{percent_string}_percent']).cumsum()
+    cum_percent_stunted = (100*cum_number_stunted/global_stunted_population).round(1)
+    stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent'] = cum_percent_stunted
+    # Add cumulative number stunted and cumulative percent stunted among those with indicator==True
+#     stunting_df[f'cumulative_number_stunted_among_stunting_above_{percent_string}_percent'] = (
+#         stunting_df['number_stunted'] * stunting_df[f'stunting_above_{percent_string}_percent']
+#     ).cumsum()
+#     stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent'] = (
+#         stunting_df[f'cumulative_number_stunted_among_stunting_above_{percent_string}_percent']/global_stunted_population
+#     )
+#     stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent'] = (
+#         100*stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent']
+#     ).round(1)
     return stunting_df
 
 def clean_orig_country_data(filepath):
