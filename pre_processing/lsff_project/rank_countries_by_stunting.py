@@ -128,16 +128,6 @@ def add_rank_and_cumulative_percent_for_cutoff(stunting_df, stunting_percent_cut
     cum_number_stunted = (stunting_df['number_stunted'] * stunting_df[f'stunting_above_{percent_string}_percent']).cumsum()
     cum_percent_stunted = (100*cum_number_stunted/global_stunted_population).round(1)
     stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent'] = cum_percent_stunted
-    # Add cumulative number stunted and cumulative percent stunted among those with indicator==True
-#     stunting_df[f'cumulative_number_stunted_among_stunting_above_{percent_string}_percent'] = (
-#         stunting_df['number_stunted'] * stunting_df[f'stunting_above_{percent_string}_percent']
-#     ).cumsum()
-#     stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent'] = (
-#         stunting_df[f'cumulative_number_stunted_among_stunting_above_{percent_string}_percent']/global_stunted_population
-#     )
-#     stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent'] = (
-#         100*stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent']
-#     ).round(1)
     return stunting_df
 
 def clean_orig_country_data(filepath):
@@ -159,8 +149,12 @@ def clean_orig_country_data(filepath):
     orig_countries = orig_countries.reset_index()
     return orig_countries
 
-def add_location_ids(orig_countries, location_ids):
-    """Adds location id's and GBD location names to the cleaned country data returned by `clean_orig_country_data()`."""
+def add_location_ids_to_orig_countries(orig_countries, location_ids):
+    """Adds location id's and GBD location names to the cleaned country data returned by `clean_orig_country_data()`.
+    location_ids should be an iterable of unique location id's that is guaranteed to contain correct id's 
+    for all the locations in orig_countries. When called below, location_ids will be the location id's in the
+    stunting dataframe, i.e. the locations we know we have data for.
+    """
     # Load location id table and filter to id and name columns
     locids = get_ids('location')[['location_id', 'location_name']]
     # Get id's for country names
@@ -169,12 +163,80 @@ def add_location_ids(orig_countries, location_ids):
     # so search for a matching name to get the correct id's and names.
     # (I pre-verified that these searches give exactly one result)
     orig_countries.loc[orig_countries.country=='Tanzania', ['location_id', 'location_name']]=(
-        search_id_table(locids, 'Tanzania')[['location_id', 'location_name']].values
+        search_id_table(locids, 'Tanzania').values # .values avoids attempting to match index, which fails
     )
     orig_countries.loc[orig_countries.country=="Cote d'Ivoire", ['location_id', 'location_name']]=(
-        search_id_table(locids, 'Ivoire')[['location_id', 'location_name']].values
+        search_id_table(locids, 'Ivoire').values # .values avoids attempting to match index, which fails
     )
     # Filter out duplicate country names by inner joining with correct id's
     location_ids=pd.Series(location_ids, name='location_id')
     orig_countries = orig_countries.merge(location_ids, how='inner')
     return orig_countries
+
+def merge_stunting_with_orig_countries(stunting_df, orig_countries_df):
+    """Assumes location id's have been added to original countries dataframe."""
+    stunting_df = stunting_df.reset_index().merge(orig_countries_df, how='outer')
+    return stunting_df
+
+def find_differences(merged_df, cutoff=None, num_countries=None):
+    """"""
+    orig_num = merged_df.rank_2013.notna().sum()
+    if num_countries is None:
+        num_countries = orig_num
+    if cutoff is None:
+        suffix='_all'
+    else:
+        suffix = f'_among_stunting_above_{cutoff:.0f}_percent'
+        
+    rank_2019_col = 'rank_2019' + suffix
+    print(rank_2019_col, num_countries, orig_num)
+    df = merged_df.query(f'{rank_2019_col} <= {num_countries} or rank_2013 <= {orig_num}')
+    differences = {}
+    return df #differences
+    
+def parse_args_and_read_data(args):
+    """Helper function for main()."""
+    # Use simple logic and default values until I figure out how to parse arguments to specify different cutoffs...
+    
+    stunting_filepath = args[0] if len(args)>0 else None
+    orig_countries_filepath = args[1] if len(args)>1 else None
+    cutoffs = [20, 18]
+    
+    if stunting_filepath is not None:
+        stunting = pd.read_hdf(stunting_filepath)
+    else:
+        locations = get_locations_for_stunting_prevalence() # currently this pulls more location ids than necessary
+        stunting = pull_stunting_prevalence_for_locations(ids_in(locations))
+        
+    if orig_countries_filepath is not None:
+        orig_countries = pd.read_csv(orig_countries_filepath) # filepath for cleaned country data without location id's
+    else:
+        orig_countries = clean_orig_country_data('bgmf_countries.csv') # filepath for original uncleaned data
+    
+    return stunting, cutoffs, orig_countries
+
+def main(args=None):
+    """"""
+    # Following the suggestion here: https://realpython.com/python-command-line-arguments/#mutating-sysargv
+    if args is None:
+        args = sys.argv[1:]
+    
+    stunting, cutoffs, orig_countries = parse_args_and_read_data(args)
+        
+    stunting = (stunting
+                .pipe(compute_mean_stunting_prevalence_by_location)
+                .pipe(add_location_names_and_populations)
+                .pipe(format_stunting_dataframe)
+                .pipe(compute_number_stunted_and_sort_descending)
+                .pipe(compute_cumulative_number_stunted_and_percent_of_global_population)
+               )
+    
+    for cutoff in cutoffs:
+        add_rank_and_cumulative_percent_for_cutoff(stunting, cutoff) # modifies stunting in place
+
+    orig_countries = add_location_ids_to_orig_countries(orig_countries, stunting.location_id.unique())
+    merged = merge_stunting_with_orig_countries(stunting, orig_countries)
+#     differences = find_differences(merged, cutoff)
+    
+if __name__=='__main__':
+    main()
