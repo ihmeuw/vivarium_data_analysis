@@ -56,8 +56,11 @@ def get_entities_from_docstring():
 
 def find_anomalous_name_columns(entities):
     """Lists columns of entity tables that do not conatin a column called f'{entity}_name'."""
+    # Use temporary dict to avoid calling _get_ids() twice in dictionary comprehension (or use a walrus := instead!)
     entities_columns = {entity: _get_ids(entity).columns for entity in entities}
     return {entity: columns for entity, columns in entities_columns.items() if f'{entity}_name' not in columns}
+    # Better solution using walrus operator, but requires Python version 3.8 (https://www.python.org/dev/peps/pep-0572/):
+#     return {entity: columns for entity in entities if f'{entity}_name' not in (columns:=_get_ids(entity).columns)}
 
 def get_name_column(entity):
     """Returns the name column for the entity in the entity id table."""
