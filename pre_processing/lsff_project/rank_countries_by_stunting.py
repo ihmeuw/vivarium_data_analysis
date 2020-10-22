@@ -175,55 +175,54 @@ def add_rank_and_cumulative_percent_for_cutoffs(stunting_df, *stunting_percent_c
         cum_number_stunted = (stunting_df['number_stunted'] * stunting_df[indicator_colname]).cumsum()
         cum_percent_stunted = (100*cum_number_stunted/global_stunted_population).round(1)
         stunting_df[f'cum_percent_global_stunted_pop_among_{indicator_colname}'] = cum_percent_stunted
-#         percent_string=f'{cutoff:.0f}' # save for reuse
-#         # Add indicator column and rank
-#         stunting_df[f'stunting_above_{percent_string}_percent'] = (
-#             stunting_df['stunting_prevalence'] >= cutoff/100
-#         )
-#         stunting_df[f'rank_2019_among_stunting_above_{percent_string}_percent'] = (
-#             stunting_df[f'stunting_above_{percent_string}_percent'].cumsum()
-#         )
-#         # Add cumulative percent stunted among those with indicator==True
-#         global_stunted_population = stunting_df['number_stunted'].sum()
-#         cum_number_stunted = (stunting_df['number_stunted'] * stunting_df[f'stunting_above_{percent_string}_percent']).cumsum()
-#         cum_percent_stunted = (100*cum_number_stunted/global_stunted_population).round(1)
-#         stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent'] = cum_percent_stunted
     return stunting_df
 
-def merge_stunting_with_orig_countries(stunting_df, orig_countries_df, cutoffs, num_countries=None):
+def merge_stunting_with_orig_countries(stunting_df, orig_countries_df, stunting_cutoffs, num_countries=None):
     """Assumes location id's have been added to original countries dataframe."""
     merged = stunting_df.reset_index().merge(orig_countries_df, how='outer')
     orig_num = merged.rank_2013.notna().sum()
     if num_countries is None:
         num_countries = orig_num
-    max_cutoff = None if cutoffs is None else max(cutoffs)
+    max_cutoff = None if stunting_cutoffs is None else max(stunting_cutoffs)
     suffix = 'all' if max_cutoff is None else f'among_{_get_indicator_colname(max_cutoff)}'
     rank_2019_col = f'rank_2019_{suffix}'
-    print(rank_2019_col, num_countries, orig_num)
+#     print(rank_2019_col, num_countries, orig_num)
     merged = merged.query(f'{rank_2019_col} <= {num_countries} or rank_2013 <= {orig_num}')
     return merged
 
 def find_differences(merged_df, stunting_cutoffs, num_countries_list):
     """"""
-    orig_num = merged_df.rank_2013.max()
+    orig_num = int(merged_df.rank_2013.max())
     differences = {}
     for cutoff in stunting_cutoffs:
         indicator_colname = _get_indicator_colname(cutoff)
         # If stunting cutoff is 0, include all countries; otherwise, get the rank column for the cutoff
         suffix = 'all' if cutoff == 0 else f'among_{indicator_colname}'
         rank_2019_col = f'rank_2019_{suffix}'
+        # Define query strings to test whether stunting is above the cutoff using DataFrame.query
+        if cutoff == 0:
+            above_cutoff = '@True' # @ treats these as python variables rather than column names
+            below_cutoff = '@False'
+        else:
+            above_cutoff = f'{indicator_colname} == True'
+            below_cutoff = f'{indicator_colname} == False'
         for num_countries in num_countries_list:
-            query_string = f'{rank_2019_col} <= {num_countries}' # Limit to num_countries countries
-            if cutoff != 0:
-                query_string += f' and {indicator_colname} == True' # Filter to stunting above cutoff
+#             query_string = f'{rank_2019_col} <= {num_countries}' # Limit to num_countries countries
             # Find differences between new and old and between old and new
             diff_name = f'top_{num_countries}_with_{indicator_colname}_in_2019_minus_top_{orig_num}_in_2013'
             # Find where rank_2013 is NaN (by definition, NaN != NaN)
-            differences[diff_name] = merged_df.query(query_string + ' and rank_2013 != rank_2013')
+#             query_string = f'(@cutoff==0 or {indicator_colname} == True) and {rank_2019_col} <= {num_countries} and rank_2013 != rank_2013'
+#             if cutoff != 0:
+#                 query_string += f' and {indicator_colname} == True'
+            query_string = f'({above_cutoff} and {rank_2019_col} <= {num_countries}) and rank_2013 != rank_2013'
+            differences[diff_name] = merged_df.query(query_string)
             diff_name = f'top_{orig_num}_in_2013_minus_top_{num_countries}_with_{indicator_colname}_in_2019'
             # Find where rank_2013 is NOT NaN
-            differences[diff_name] = merged_df.query(query_string + ' and rank_2013 == rank_2013')
-
+#             query_string = f'(@cutoff==0 or {indicator_colname} == False) and {rank_2019_col} <= {num_countries} and rank_2013 == rank_2013'
+            query_string = f'({below_cutoff} or {rank_2019_col} > {num_countries}) and rank_2013 == rank_2013'
+#             if cutoff != 0:
+#                 query_string += f' or {indicator_colname} == False'
+            differences[diff_name] = merged_df.query(query_string)
     return differences
 
 def save_csv_files(orig_countries_with_ids_df, ranked_stunting_df, merged_df, differences):
