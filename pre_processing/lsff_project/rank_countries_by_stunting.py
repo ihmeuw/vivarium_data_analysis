@@ -7,6 +7,49 @@ from pre_processing.id_helper import *
 from db_queries import get_ids, get_population
 from get_draws.api import get_draws
 
+def clean_orig_country_data(filepath):
+    """Clean the original country data from BGMF in Paulina's spreadsheet saved as a .csv.
+    
+    - Filters to the relevant columns [country, survey year, percent stunting]
+    - Adds a column recording the country rank in order of decending stunting prevalence
+    - Makes all column names valid Python variables in lower case
+    
+    Returns a pandas DataFrame.
+    """
+    orig_countries = pd.read_csv(filepath)
+    orig_countries = orig_countries.iloc[:,:3]
+    orig_countries.drop(index=0, inplace=True)
+    orig_countries.index.rename('rank_2013', inplace=True)
+    orig_countries.columns = orig_countries.columns.str.replace('%', 'percent')
+    orig_countries.columns = orig_countries.columns.str.replace(' ', '_')
+    orig_countries.columns = orig_countries.columns.str.lower()
+    orig_countries = orig_countries.reset_index()
+    return orig_countries
+
+def add_location_ids_to_orig_countries(orig_countries, location_ids):
+    """Adds location id's and GBD location names to the cleaned country data returned by `clean_orig_country_data()`.
+    location_ids should be an iterable of unique location id's that is guaranteed to contain correct id's 
+    for all the locations in orig_countries. When called below, location_ids will be the location id's in the
+    stunting dataframe, i.e. the locations we know we have data for.
+    """
+    # Load location id table and filter to id and name columns
+    locids = get_ids('location')[['location_id', 'location_name']]
+    # Get id's for country names
+    orig_countries = orig_countries.merge(locids, left_on='country', right_on='location_name', how='left')
+    # The names Tanzania and Cote d'Ivoire aren't in the location database,
+    # so search for a matching name to get the correct id's and names.
+    # (I pre-verified that these searches give exactly one result)
+    orig_countries.loc[orig_countries.country=='Tanzania', ['location_id', 'location_name']]=(
+        search_id_table(locids, 'Tanzania').values # .values avoids attempting to match index, which fails
+    )
+    orig_countries.loc[orig_countries.country=="Cote d'Ivoire", ['location_id', 'location_name']]=(
+        search_id_table(locids, 'Ivoire').values # .values avoids attempting to match index, which fails
+    )
+    # Filter out duplicate country names by inner joining with correct id's
+    location_ids=pd.Series(location_ids, name='location_id')
+    orig_countries = orig_countries.merge(location_ids, how='inner')
+    return orig_countries
+
 def get_locations_for_stunting_prevalence(category='admin0'):
     """Returns location id table filtered to the specified location category.
     Currently the only supported category is 'admin0' (the default), which finds locations 
@@ -110,97 +153,89 @@ def compute_cumulative_number_stunted_and_percent_of_global_population(stunting_
     stunting_df['cum_percent_global_stunted_pop'] = (100*stunting_df['cum_percent_global_stunted_pop']).round(1)
     return stunting_df
 
-def add_rank_and_cumulative_percent_for_cutoff(stunting_df, stunting_percent_cutoff, copy=False):
+def _get_indicator_colname(percent):
+    """Returns column name for the indicator column for specified stunting percent cutoff."""
+    return f'stunting_above_{percent:.0f}_percent'
+
+def add_rank_and_cumulative_percent_for_cutoffs(stunting_df, *stunting_percent_cutoffs, copy=False):
     """"""
     if copy:
         stunting_df = stunting_df.copy()
-
-    percent_string=f'{stunting_percent_cutoff:.0f}' # save for reuse
-    # Add indicator column and rank
-    stunting_df[f'stunting_above_{percent_string}_percent'] = (
-        stunting_df['stunting_prevalence'] >= stunting_percent_cutoff/100
-    )
-    stunting_df[f'rank_2019_among_stunting_above_{percent_string}_percent'] = (
-        stunting_df[f'stunting_above_{percent_string}_percent'].cumsum()
-    )
-    # Add cumulative percent stunted among those with indicator==True
-    global_stunted_population = stunting_df['number_stunted'].sum()
-    cum_number_stunted = (stunting_df['number_stunted'] * stunting_df[f'stunting_above_{percent_string}_percent']).cumsum()
-    cum_percent_stunted = (100*cum_number_stunted/global_stunted_population).round(1)
-    stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent'] = cum_percent_stunted
+    for cutoff in stunting_percent_cutoffs:
+        indicator_colname = _get_indicator_colname(cutoff)
+        # Add indicator column and rank
+        stunting_df[indicator_colname] = (
+            stunting_df['stunting_prevalence'] >= cutoff/100
+        )
+        stunting_df[f'rank_2019_among_{indicator_colname}'] = (
+            stunting_df[indicator_colname].cumsum()
+        )
+        # Add cumulative percent stunted among those with indicator==True
+        global_stunted_population = stunting_df['number_stunted'].sum()
+        cum_number_stunted = (stunting_df['number_stunted'] * stunting_df[indicator_colname]).cumsum()
+        cum_percent_stunted = (100*cum_number_stunted/global_stunted_population).round(1)
+        stunting_df[f'cum_percent_global_stunted_pop_among_{indicator_colname}'] = cum_percent_stunted
+#         percent_string=f'{cutoff:.0f}' # save for reuse
+#         # Add indicator column and rank
+#         stunting_df[f'stunting_above_{percent_string}_percent'] = (
+#             stunting_df['stunting_prevalence'] >= cutoff/100
+#         )
+#         stunting_df[f'rank_2019_among_stunting_above_{percent_string}_percent'] = (
+#             stunting_df[f'stunting_above_{percent_string}_percent'].cumsum()
+#         )
+#         # Add cumulative percent stunted among those with indicator==True
+#         global_stunted_population = stunting_df['number_stunted'].sum()
+#         cum_number_stunted = (stunting_df['number_stunted'] * stunting_df[f'stunting_above_{percent_string}_percent']).cumsum()
+#         cum_percent_stunted = (100*cum_number_stunted/global_stunted_population).round(1)
+#         stunting_df[f'cum_percent_global_stunted_pop_among_stunting_above_{percent_string}_percent'] = cum_percent_stunted
     return stunting_df
 
-def clean_orig_country_data(filepath):
-    """Clean the original country data from BGMF in Paulina's spreadsheet saved as a .csv.
-    
-    - Filters to the relevant columns [country, survey year, percent stunting]
-    - Adds a column recording the country rank in order of decending stunting prevalence
-    - Makes all column names valid Python variables in lower case
-    
-    Returns a pandas DataFrame.
-    """
-    orig_countries = pd.read_csv(filepath)
-    orig_countries = orig_countries.iloc[:,:3]
-    orig_countries.drop(index=0, inplace=True)
-    orig_countries.index.rename('rank_2013', inplace=True)
-    orig_countries.columns = orig_countries.columns.str.replace('%', 'percent')
-    orig_countries.columns = orig_countries.columns.str.replace(' ', '_')
-    orig_countries.columns = orig_countries.columns.str.lower()
-    orig_countries = orig_countries.reset_index()
-    return orig_countries
-
-def add_location_ids_to_orig_countries(orig_countries, location_ids):
-    """Adds location id's and GBD location names to the cleaned country data returned by `clean_orig_country_data()`.
-    location_ids should be an iterable of unique location id's that is guaranteed to contain correct id's 
-    for all the locations in orig_countries. When called below, location_ids will be the location id's in the
-    stunting dataframe, i.e. the locations we know we have data for.
-    """
-    # Load location id table and filter to id and name columns
-    locids = get_ids('location')[['location_id', 'location_name']]
-    # Get id's for country names
-    orig_countries = orig_countries.merge(locids, left_on='country', right_on='location_name', how='left')
-    # The names Tanzania and Cote d'Ivoire aren't in the location database,
-    # so search for a matching name to get the correct id's and names.
-    # (I pre-verified that these searches give exactly one result)
-    orig_countries.loc[orig_countries.country=='Tanzania', ['location_id', 'location_name']]=(
-        search_id_table(locids, 'Tanzania').values # .values avoids attempting to match index, which fails
-    )
-    orig_countries.loc[orig_countries.country=="Cote d'Ivoire", ['location_id', 'location_name']]=(
-        search_id_table(locids, 'Ivoire').values # .values avoids attempting to match index, which fails
-    )
-    # Filter out duplicate country names by inner joining with correct id's
-    location_ids=pd.Series(location_ids, name='location_id')
-    orig_countries = orig_countries.merge(location_ids, how='inner')
-    return orig_countries
-
-def merge_stunting_with_orig_countries(stunting_df, orig_countries_df):
+def merge_stunting_with_orig_countries(stunting_df, orig_countries_df, cutoffs, num_countries=None):
     """Assumes location id's have been added to original countries dataframe."""
-    stunting_df = stunting_df.reset_index().merge(orig_countries_df, how='outer')
-    return stunting_df
-
-def find_differences(merged_df, cutoff=None, num_countries=None):
-    """"""
-    orig_num = merged_df.rank_2013.notna().sum()
+    merged = stunting_df.reset_index().merge(orig_countries_df, how='outer')
+    orig_num = merged.rank_2013.notna().sum()
     if num_countries is None:
         num_countries = orig_num
-    if cutoff is None:
-        suffix='_all'
-    else:
-        suffix = f'_among_stunting_above_{cutoff:.0f}_percent'
-        
-    rank_2019_col = 'rank_2019' + suffix
+    max_cutoff = None if cutoffs is None else max(cutoffs)
+    suffix = 'all' if max_cutoff is None else f'among_{_get_indicator_colname(max_cutoff)}'
+    rank_2019_col = f'rank_2019_{suffix}'
     print(rank_2019_col, num_countries, orig_num)
-    df = merged_df.query(f'{rank_2019_col} <= {num_countries} or rank_2013 <= {orig_num}')
+    merged = merged.query(f'{rank_2019_col} <= {num_countries} or rank_2013 <= {orig_num}')
+    return merged
+
+def find_differences(merged_df, stunting_cutoffs, num_countries_list):
+    """"""
+    orig_num = merged_df.rank_2013.max()
     differences = {}
-    return df #differences
+    for cutoff in stunting_cutoffs:
+        indicator_colname = _get_indicator_colname(cutoff)
+        # If stunting cutoff is 0, include all countries; otherwise, get the rank column for the cutoff
+        suffix = 'all' if cutoff == 0 else f'among_{indicator_colname}'
+        rank_2019_col = f'rank_2019_{suffix}'
+        for num_countries in num_countries_list:
+            query_string = f'{rank_2019_col} <= {num_countries}' # Limit to num_countries countries
+            if cutoff != 0:
+                query_string += f' and {indicator_colname} == True' # Filter to stunting above cutoff
+            # Find differences between new and old and between old and new
+            diff_name = f'top_{num_countries}_with_{indicator_colname}_in_2019_minus_top_{orig_num}_in_2013'
+            # Find where rank_2013 is NaN (by definition, NaN != NaN)
+            differences[diff_name] = merged_df.query(query_string + ' and rank_2013 != rank_2013')
+            diff_name = f'top_{orig_num}_in_2013_minus_top_{num_countries}_with_{indicator_colname}_in_2019'
+            # Find where rank_2013 is NOT NaN
+            differences[diff_name] = merged_df.query(query_string + ' and rank_2013 == rank_2013')
+
+    return differences
+
+def save_csv_files(orig_countries_with_ids_df, ranked_stunting_df, merged_df, differences):
+    """"""
+    pass
     
 def parse_args_and_read_data(args):
-    """Helper function for main()."""
+    """Helper function for main() to parse arguments and read input data."""
     # Use simple logic and default values until I figure out how to parse arguments to specify different cutoffs...
     
     stunting_filepath = args[0] if len(args)>0 else None
     orig_countries_filepath = args[1] if len(args)>1 else None
-    cutoffs = [20, 18]
     
     if stunting_filepath is not None:
         stunting = pd.read_hdf(stunting_filepath)
@@ -213,7 +248,10 @@ def parse_args_and_read_data(args):
     else:
         orig_countries = clean_orig_country_data('bgmf_countries.csv') # filepath for original uncleaned data
     
-    return stunting, cutoffs, orig_countries
+    stunting_cutoffs = [20,18]
+    num_countries_list = [25,len(orig_countries)]
+    
+    return orig_countries, stunting, stunting_cutoffs, num_countries_list
 
 def main(args=None):
     """"""
@@ -221,22 +259,27 @@ def main(args=None):
     if args is None:
         args = sys.argv[1:]
     
-    stunting, cutoffs, orig_countries = parse_args_and_read_data(args)
-        
+    orig_countries, stunting, stunting_cutoffs, num_countries_list = parse_args_and_read_data(args)
+    
+    orig_countries = add_location_ids_to_orig_countries(orig_countries, stunting.location_id.unique())
+
     stunting = (stunting
                 .pipe(compute_mean_stunting_prevalence_by_location)
                 .pipe(add_location_names_and_populations)
                 .pipe(format_stunting_dataframe)
                 .pipe(compute_number_stunted_and_sort_descending)
                 .pipe(compute_cumulative_number_stunted_and_percent_of_global_population)
+                .pipe(add_rank_and_cumulative_percent_for_cutoffs, *stunting_cutoffs)
                )
     
-    for cutoff in cutoffs:
-        add_rank_and_cumulative_percent_for_cutoff(stunting, cutoff) # modifies stunting in place
+#     for cutoff in cutoffs:
+#         add_rank_and_cumulative_percent_for_cutoff(stunting, cutoff) # modifies stunting in place
 
-    orig_countries = add_location_ids_to_orig_countries(orig_countries, stunting.location_id.unique())
-    merged = merge_stunting_with_orig_countries(stunting, orig_countries)
-#     differences = find_differences(merged, cutoff)
+    merged = merge_stunting_with_orig_countries(stunting, orig_countries, stunting_cutoffs)
+    # Add 0 to the list of cutoffs to see differences with original countries if we don't include a stunting cutoff
+    differences = find_differences(merged, [0,*stunting_cutoffs], num_countries_list)
+    
+    save_csv_files(orig_countries, stunting, merged, differences)
     
 if __name__=='__main__':
     main()
