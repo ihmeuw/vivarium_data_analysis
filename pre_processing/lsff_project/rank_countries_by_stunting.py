@@ -45,7 +45,7 @@ def add_location_ids_to_orig_countries(orig_countries, location_ids):
     orig_countries.loc[orig_countries.country=="Cote d'Ivoire", ['location_id', 'location_name']]=(
         search_id_table(locids, 'Ivoire').values # .values avoids attempting to match index, which fails
     )
-    # Filter out duplicate country names by inner joining with correct id's
+    # Filter out duplicate country names (e.g. Sudan) by inner joining with correct id's
     location_ids=pd.Series(location_ids, name='location_id')
     orig_countries = orig_countries.merge(location_ids, how='inner')
     return orig_countries
@@ -199,57 +199,44 @@ def find_differences(merged_df, stunting_cutoffs, num_countries_list):
         # If stunting cutoff is 0, include all countries; otherwise, get the rank column for the cutoff
         suffix = 'all' if cutoff == 0 else f'among_{indicator_colname}'
         rank_2019_col = f'rank_2019_{suffix}'
-        # Define query strings to test whether stunting is above the cutoff using DataFrame.query
-        if cutoff == 0:
-            above_cutoff = '@True' # @ treats these as python variables rather than column names
-            below_cutoff = '@False'
-        else:
-            above_cutoff = f'{indicator_colname} == True'
-            below_cutoff = f'{indicator_colname} == False'
         for num_countries in num_countries_list:
-#             query_string = f'{rank_2019_col} <= {num_countries}' # Limit to num_countries countries
-            # Find differences between new and old and between old and new
+            # Find what's in new and not in old
             diff_name = f'top_{num_countries}_with_{indicator_colname}_in_2019_minus_top_{orig_num}_in_2013'
-            # Find where rank_2013 is NaN (by definition, NaN != NaN)
-#             query_string = f'(@cutoff==0 or {indicator_colname} == True) and {rank_2019_col} <= {num_countries} and rank_2013 != rank_2013'
-#             if cutoff != 0:
-#                 query_string += f' and {indicator_colname} == True'
-            query_string = f'({above_cutoff} and {rank_2019_col} <= {num_countries}) and rank_2013 != rank_2013'
+            query_string = (f'(stunting_prevalence >= {cutoff/100} and {rank_2019_col} <= {num_countries})' # In new
+                            ' and rank_2013 != rank_2013') # Not in old iff rank_2013 is NaN (by definition, NaN != NaN)
             differences[diff_name] = merged_df.query(query_string)
+            # Find what's in old and not in new
             diff_name = f'top_{orig_num}_in_2013_minus_top_{num_countries}_with_{indicator_colname}_in_2019'
-            # Find where rank_2013 is NOT NaN
-#             query_string = f'(@cutoff==0 or {indicator_colname} == False) and {rank_2019_col} <= {num_countries} and rank_2013 == rank_2013'
-            query_string = f'({below_cutoff} or {rank_2019_col} > {num_countries}) and rank_2013 == rank_2013'
-#             if cutoff != 0:
-#                 query_string += f' or {indicator_colname} == False'
+            query_string = (f'(stunting_prevalence < {cutoff/100} or {rank_2019_col} > {num_countries})' # Not in new
+                            ' and rank_2013 == rank_2013') # In old iff rank_2013 is NOT NaN
             differences[diff_name] = merged_df.query(query_string)
     return differences
 
 def save_csv_files(orig_countries_with_ids_df, ranked_stunting_df, merged_df, differences):
     """"""
     pass
-    
+
 def parse_args_and_read_data(args):
     """Helper function for main() to parse arguments and read input data."""
     # Use simple logic and default values until I figure out how to parse arguments to specify different cutoffs...
-    
+
     stunting_filepath = args[0] if len(args)>0 else None
     orig_countries_filepath = args[1] if len(args)>1 else None
-    
+
     if stunting_filepath is not None:
         stunting = pd.read_hdf(stunting_filepath)
     else:
         locations = get_locations_for_stunting_prevalence() # currently this pulls more location ids than necessary
         stunting = pull_stunting_prevalence_for_locations(ids_in(locations))
-        
+
     if orig_countries_filepath is not None:
         orig_countries = pd.read_csv(orig_countries_filepath) # filepath for cleaned country data without location id's
     else:
         orig_countries = clean_orig_country_data('bgmf_countries.csv') # filepath for original uncleaned data
-    
+
     stunting_cutoffs = [20,18]
     num_countries_list = [25,len(orig_countries)]
-    
+
     return orig_countries, stunting, stunting_cutoffs, num_countries_list
 
 def main(args=None):
