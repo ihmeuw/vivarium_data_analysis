@@ -153,21 +153,36 @@ def compute_cumulative_number_stunted_and_percent_of_global_population(stunting_
     stunting_df['cum_percent_global_stunted_pop'] = (100*stunting_df['cum_percent_global_stunted_pop']).round(1)
     return stunting_df
 
-def _get_indicator_colname(percent):
-    """Returns column name for the indicator column for specified stunting percent cutoff."""
-    return f'stunting_above_{percent:.0f}_percent'
+# def _get_indicator_colname(percent):
+#     """Returns column name for the indicator column for specified stunting percent cutoff."""
+#     return f'stunting_above_{percent:.0f}_percent'
+
+def _get_indicator_colname_and_rank_2019_colname(stunting_cutoff):
+    """Returns column name for the indicator column for specified stunting percent cutoff,
+    and the column name for the corresponding ranking.
+    """
+#     indicator_colname = _get_indicator_colname(stunting_cutoff)
+    indicator_colname = f'stunting_above_{stunting_cutoff:.0f}_percent'
+    # If stunting cutoff is 0, include all countries; otherwise, get the rank column for the cutoff
+    suffix = 'all' if stunting_cutoff == 0 else f'among_{indicator_colname}'
+    rank_2019_colname = f'rank_2019_{suffix}'
+    return indicator_colname, rank_2019_colname
 
 def add_rank_and_cumulative_percent_for_cutoffs(stunting_df, *stunting_percent_cutoffs, copy=False):
     """"""
     if copy:
         stunting_df = stunting_df.copy()
     for cutoff in stunting_percent_cutoffs:
-        indicator_colname = _get_indicator_colname(cutoff)
+        if cutoff == 0:
+            continue # The relevant columns are already in the dataframe
+#         indicator_colname = _get_indicator_colname(cutoff)
+        indicator_colname, rank_2019_colname = _get_indicator_colname_and_rank_2019_colname(cutoff)
         # Add indicator column and rank
         stunting_df[indicator_colname] = (
             stunting_df['stunting_prevalence'] >= cutoff/100
         )
-        stunting_df[f'rank_2019_among_{indicator_colname}'] = (
+#         stunting_df[f'rank_2019_among_{indicator_colname}'] = (
+        stunting_df[rank_2019_colname] = (
             stunting_df[indicator_colname].cumsum()
         )
         # Add cumulative percent stunted among those with indicator==True
@@ -177,33 +192,64 @@ def add_rank_and_cumulative_percent_for_cutoffs(stunting_df, *stunting_percent_c
         stunting_df[f'cum_percent_global_stunted_pop_among_{indicator_colname}'] = cum_percent_stunted
     return stunting_df
 
-def merge_stunting_with_orig_countries(stunting_df, orig_countries_df, stunting_cutoffs, num_countries=None):
-    """Assumes location id's have been added to original countries dataframe."""
+def merge_stunting_with_orig_countries(stunting_df, orig_countries_df, stunting_cutoffs=None, num_countries=None):
+    """Performs an outer merge of stunting_df with orig_countries_df.
+    Assumes location id's have been added to original countries dataframe.
+    Columns for stunting_cutoffs must be in stunting_df.
+    The number of countries is limited to num_countries for the most restrictive stunting cutoff passed,
+    or to the original number of countries, whichever is greater. The total number of rows may be greater
+    than both the original number and num_countries (e.g. if one of the stunting cutoffs is 100%, then
+    all 195 countries will be returned, regardless of the value of num_countries).
+    """
     merged = stunting_df.reset_index().merge(orig_countries_df, how='outer')
     orig_num = merged.rank_2013.notna().sum()
     if num_countries is None:
         num_countries = orig_num
-    max_cutoff = None if stunting_cutoffs is None else max(stunting_cutoffs)
-    suffix = 'all' if max_cutoff is None else f'among_{_get_indicator_colname(max_cutoff)}'
-    rank_2019_col = f'rank_2019_{suffix}'
+#     max_cutoff = None if stunting_cutoffs is None else max(stunting_cutoffs)
+#     suffix = 'all' if max_cutoff is None else f'among_{_get_indicator_colname(max_cutoff)}'
+#     rank_2019_col = f'rank_2019_{suffix}'
 #     print(rank_2019_col, num_countries, orig_num)
+    max_cutoff = 0 if stunting_cutoffs is None else max(stunting_cutoffs)
+    _, rank_2019_col = _get_indicator_colname_and_rank_2019_colname(max_cutoff)
     merged = merged.query(f'{rank_2019_col} <= {num_countries} or rank_2013 <= {orig_num}')
     return merged
 
+def _get_query_for_most_stunted(stunting_cutoff, rank_colname, num_countries):
+    return f'stunting_prevalence >= {stunting_cutoff/100} and {rank_colname} <= {num_countries}'
+
+def get_locations_ranked_by_stunting_for_cutoffs(stunting_df_or_merged_df, stunting_cutoffs, num_countries_list):
+    """Returns a dictionary of dataframes, where the key describes the dataframe."""
+    rankings = {}
+    for cutoff in stunting_cutoffs:
+#         indicator_colname = _get_indicator_colname(cutoff)
+#         # If stunting cutoff is 0, include all countries; otherwise, get the rank column for the cutoff
+#         suffix = 'all' if cutoff == 0 else f'among_{indicator_colname}'
+#         rank_2019_col = f'rank_2019_{suffix}'
+        indicator_colname, rank_2019_col = _get_indicator_colname_and_rank_2019_colname(cutoff)
+        for num_countries in num_countries_list:
+            ranking_name = f'top_{num_countries}_countries_with_{indicator_colname}_in_2019'
+#             query_string = f'stunting_prevalence >= {cutoff/100} and {rank_2019_col} <= {num_countries}'
+            query_string = _get_query_for_most_stunted(cutoff, rank_2019_col, num_countries)
+            rankings[ranking_name] = stunting_df_or_merged_df.query(query_string)
+    return rankings
+
 def find_differences(merged_df, stunting_cutoffs, num_countries_list):
-    """"""
+    """Returns a dictionary of dataframes, where the key describes the dataframe."""
     orig_num = int(merged_df.rank_2013.max())
     differences = {}
     for cutoff in stunting_cutoffs:
-        indicator_colname = _get_indicator_colname(cutoff)
-        # If stunting cutoff is 0, include all countries; otherwise, get the rank column for the cutoff
-        suffix = 'all' if cutoff == 0 else f'among_{indicator_colname}'
-        rank_2019_col = f'rank_2019_{suffix}'
+#         indicator_colname = _get_indicator_colname(cutoff)
+#         # If stunting cutoff is 0, include all countries; otherwise, get the rank column for the cutoff
+#         suffix = 'all' if cutoff == 0 else f'among_{indicator_colname}'
+#         rank_2019_col = f'rank_2019_{suffix}'
+        indicator_colname, rank_2019_col = _get_indicator_colname_and_rank_2019_colname(cutoff)
         for num_countries in num_countries_list:
             # Find what's in new and not in old
             diff_name = f'top_{num_countries}_with_{indicator_colname}_in_2019_minus_top_{orig_num}_in_2013'
             query_string = (f'(stunting_prevalence >= {cutoff/100} and {rank_2019_col} <= {num_countries})' # In new
                             ' and rank_2013 != rank_2013') # Not in old iff rank_2013 is NaN (by definition, NaN != NaN)
+#             above_cutoff_and_in_top = _get_query_for_most_stunted(cutoff, rank_2019_col, num_countries)
+#             query_string = f'({above_cutoff_and_in_top}) and rank_2013 != rank_2013'
             differences[diff_name] = merged_df.query(query_string)
             # Find what's in old and not in new
             diff_name = f'top_{orig_num}_in_2013_minus_top_{num_countries}_with_{indicator_colname}_in_2019'
