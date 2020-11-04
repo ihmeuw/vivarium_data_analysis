@@ -215,6 +215,9 @@ def merge_stunting_with_orig_countries(stunting_df, orig_countries_df, stunting_
     return merged
 
 def _get_query_for_most_stunted(stunting_cutoff, rank_colname, num_countries):
+    """Returns query string to find the top num_countries according to rank_colname,
+    with stunting prevalance above stunting_cutoff.
+    """
     return f'stunting_prevalence >= {stunting_cutoff/100} and {rank_colname} <= {num_countries}'
 
 def get_locations_ranked_by_stunting_for_cutoffs(stunting_df_or_merged_df, stunting_cutoffs, num_countries_list):
@@ -233,7 +236,7 @@ def get_locations_ranked_by_stunting_for_cutoffs(stunting_df_or_merged_df, stunt
             rankings[ranking_name] = stunting_df_or_merged_df.query(query_string)
     return rankings
 
-def find_differences(merged_df, stunting_cutoffs, num_countries_list):
+def find_differences(merged_df, stunting_cutoffs, num_countries_list, compare_with_orig_num=True):
     """Returns a dictionary of dataframes, where the key describes the dataframe."""
     orig_num = int(merged_df.rank_2013.max())
     differences = {}
@@ -244,21 +247,26 @@ def find_differences(merged_df, stunting_cutoffs, num_countries_list):
 #         rank_2019_col = f'rank_2019_{suffix}'
         indicator_colname, rank_2019_col = _get_indicator_colname_and_rank_2019_colname(cutoff)
         for num_countries in num_countries_list:
-            # Find what's in new and not in old
-            diff_name = f'top_{num_countries}_with_{indicator_colname}_in_2019_minus_top_{orig_num}_in_2013'
-            query_string = (f'(stunting_prevalence >= {cutoff/100} and {rank_2019_col} <= {num_countries})' # In new
-                            ' and rank_2013 != rank_2013') # Not in old iff rank_2013 is NaN (by definition, NaN != NaN)
-#             above_cutoff_and_in_top = _get_query_for_most_stunted(cutoff, rank_2019_col, num_countries)
-#             query_string = f'({above_cutoff_and_in_top}) and rank_2013 != rank_2013'
-            differences[diff_name] = merged_df.query(query_string)
-            # Find what's in old and not in new
-            diff_name = f'top_{orig_num}_in_2013_minus_top_{num_countries}_with_{indicator_colname}_in_2019'
-            query_string = (f'(stunting_prevalence < {cutoff/100} or {rank_2019_col} > {num_countries})' # Not in new
-                            ' and rank_2013 == rank_2013') # In old iff rank_2013 is NOT NaN
-            differences[diff_name] = merged_df.query(query_string)
+            old_nums = [num_countries]
+            if compare_with_orig_num and num_countries != orig_num:
+                old_nums.append(orig_num)
+            for old_num in old_nums:
+                # Find what's in new and not in old
+                diff_name = f'top_{num_countries}_with_{indicator_colname}_in_2019_minus_top_{old_num}_in_2013'
+    #             query_string = (f'(stunting_prevalence >= {cutoff/100} and {rank_2019_col} <= {num_countries})' # In new
+    #                             ' and rank_2013 != rank_2013') # Not in old iff rank_2013 is NaN (by definition, NaN != NaN)
+                above_cutoff_and_in_top = _get_query_for_most_stunted(cutoff, rank_2019_col, num_countries)
+                query_string = f'({above_cutoff_and_in_top}) and (rank_2013 != rank_2013 or rank_2013 > {old_num})'
+                differences[diff_name] = merged_df.query(query_string)
+                # Find what's in old and not in new
+                diff_name = f'top_{old_num}_in_2013_minus_top_{num_countries}_with_{indicator_colname}_in_2019'
+    #             query_string = (f'(stunting_prevalence < {cutoff/100} or {rank_2019_col} > {num_countries})' # Not in new
+    #                             ' and rank_2013 == rank_2013') # In old iff rank_2013 is NOT NaN
+                query_string = f'~({above_cutoff_and_in_top}) and rank_2013 <= {old_num}'
+                differences[diff_name] = merged_df.query(query_string)
     return differences
 
-def save_csv_files(orig_countries_with_ids_df, ranked_stunting_df, merged_df, differences):
+def save_csv_files(orig_countries_with_ids_df, ranked_stunting_df, merged_df, top_countries, differences):
     """"""
     pass
 
@@ -282,8 +290,10 @@ def parse_args_and_read_data(args):
 
     stunting_cutoffs = [20,18]
     num_countries_list = [25,len(orig_countries)]
+#     num_counries_dict = {25:[25,len(orig_countries)], len(orig_countries):[len(orig_countries)]}
+    compare_with_orig_num = True
 
-    return orig_countries, stunting, stunting_cutoffs, num_countries_list
+    return orig_countries, stunting, stunting_cutoffs, num_countries_list, compare_with_orig_num
 
 def main(args=None):
     """"""
@@ -291,7 +301,7 @@ def main(args=None):
     if args is None:
         args = sys.argv[1:]
     
-    orig_countries, stunting, stunting_cutoffs, num_countries_list = parse_args_and_read_data(args)
+    orig_countries, stunting, stunting_cutoffs, num_countries_list, compare_with_orig_num = parse_args_and_read_data(args)
     
     orig_countries = add_location_ids_to_orig_countries(orig_countries, stunting.location_id.unique())
 
@@ -304,14 +314,15 @@ def main(args=None):
                 .pipe(add_rank_and_cumulative_percent_for_cutoffs, *stunting_cutoffs)
                )
     
-#     for cutoff in cutoffs:
-#         add_rank_and_cumulative_percent_for_cutoff(stunting, cutoff) # modifies stunting in place
-
+    # The merged dataframe can be used to compute new rankings and differences between new and old
     merged = merge_stunting_with_orig_countries(stunting, orig_countries, stunting_cutoffs)
-    # Add 0 to the list of cutoffs to see differences with original countries if we don't include a stunting cutoff
-    differences = find_differences(merged, [0,*stunting_cutoffs], num_countries_list)
+
+    # Final results: Find top ranked countries and differences with original countries
+    stunting_cutoffs = [0,*stunting_cutoffs] # Add 0 to the list of cutoffs to see ranking if we don't include a stunting cutoff
+    top_countries = get_locations_ranked_by_stunting_for_cutoffs(merged, stunting_cutoffs, num_countries_list)
+    differences = find_differences(merged, stunting_cutoffs, num_countries_list, compare_with_orig_num)
     
-    save_csv_files(orig_countries, stunting, merged, differences)
+    save_csv_files(orig_countries, stunting, merged, top_countries, differences)
     
 if __name__=='__main__':
     main()
