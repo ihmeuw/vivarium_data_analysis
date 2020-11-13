@@ -130,3 +130,7 @@ dmypy.json
 
 # Large files
 *.hdf
+
+# Flag to explicitly ignore files
+*__gitignore__*
+
