@@ -160,21 +160,71 @@ def averted(measure, baseline_scenario, scenario_col=None):
     # Columns to match when subtracting intervention from baseline
     index_columns = sorted(set(baseline.columns) - set([scenario_col, VALUE_COLUMN]),
                            key=baseline.columns.get_loc)
-#     print(index_columns)
+    print(index_columns)
     
     # Put the scenario column in the index of intervention but not baseline.
     # When we subtract, this will broadcast over different interventions if there are more than one.
     baseline = baseline.set_index(index_columns)
     intervention = intervention.set_index(index_columns+[scenario_col])
+    print('baseline index:', baseline.index.names)
+    print('intervention index:', intervention.index.names)
     
     # Get the averted values
-    averted = baseline[VALUE_COLUMN] - intervention[VALUE_COLUMN]
+    averted = baseline[[VALUE_COLUMN]] - intervention[[VALUE_COLUMN]]
+    print('averted index:', averted.index.names)
     
     # Insert a column after the scenario column to record what the baseline scenario was
     averted = averted.reset_index()
+    print(averted.columns)
     averted.insert(averted.columns.get_loc(scenario_col)+1, 'relative_to', baseline_scenario)
     
     return averted
+
+def difference(measure:pd.DataFrame, identifier_col:str, minuend_id=None, subtrahend_id=None)->pd.DataFrame:
+    """
+    Returns the difference of a measure stored in the measure DataFrame, where the
+    rows for the minuend (that which is diminished) and subtrahend (that which is subtracted)
+    are determined by the values in identifier_col
+    """
+    if minuend_id is not None:
+        minuend = measure[measure[identifier_col] == minuend_id]
+        if subtrahend_id is not None:
+            subtrahend = measure[measure[identifier_col] == subtrahend_id]
+        else:
+            # Use all values not equal to minuend_id for subtrahend (minuend will be broadcast over subtrahend)
+            subtrahend = measure[measure[identifier_col] != minuend_id]
+    elif subtrahend_id is not None:
+        subtrahend = measure[measure[identifier_col] == subtrahend_id]
+        # Use all values not equal to subtrahend_id for minuend (subtrahend will be broadcast over minuend)
+        minuend = measure[measure[identifier_col] != subtrahend_id]
+    else:
+        raise ValueError("At least one of `minuend_id` and `subtrahend_id` must be specified")
+
+    # Columns to match when subtracting subtrahend from minuend
+    # Oh, I just noticed that I could use the Index.difference() method here, which I was unaware of before...
+    index_columns = sorted(set(measure.columns) - set([identifier_col, VALUE_COLUMN]),
+                           key=measure.columns.get_loc)
+
+    minuend = minuend.set_index(index_columns)
+    subtrahend = subtrahend.set_index(index_columns)
+
+    # Add the identifier column to the index of the larger dataframe
+    # (or default to the subtrahend dataframe if neither needs broadcasting).
+    if minuend_id is None:
+        minuend.set_index(identifier_col, append=True)
+    else:
+        subtrahend.set_index(identifier_col, append=True)
+
+    # Subtract DataFrames, not Series, because Series will drop the identifier column from the index
+    # if there is no broadcasting.
+    difference = minuend[[VALUE_COLUMN]] - subtrahend[[VALUE_COLUMN]]
+    difference = difference.reset_index()
+
+    # Add a column to specify what was subtracted from (the minuend) or what was subtracted (the subtrahend)
+    colname, value = 'subtracted_from', minuend_id if minuend_id is not None else 'subtracted_value', subtrahend_id
+    difference.insert(difference.columns.get_loc(identifier_col)+1, colname, value)
+
+    return difference
 
 def describe(data, **describe_kwargs):
     """Wrapper function for DataFrame.describe() with `data` grouped by everything except draw and value."""
