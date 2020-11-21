@@ -65,3 +65,30 @@ def read_lbwsg_data(artifact_path, measure, *filter_terms, draws='all'):
             draw_data_dfs.append(draw_data)
 
     return pd.concat(draw_data_dfs, axis=1, copy=False).set_index(index_cols.columns.to_list())
+
+def get_intervals_from_name(name: str) -> Tuple[pd.Interval, pd.Interval]:
+    """Converts a LBWSG category name to a pair of intervals.
+
+    The first interval corresponds to gestational age in weeks, the
+    second to birth weight in grams.
+    """
+    numbers_only = [int(n) for n in re.findall(r'\d+', name)] # The regex \d+ matches 1 or more digits
+    return (pd.Interval(numbers_only[0], numbers_only[1], closed='left'),
+            pd.Interval(numbers_only[2], numbers_only[3], closed='left'))
+
+def get_lbwsg_categories_by_interval(category_dict):
+    """
+    Return a pandas Series indexed by (gestational age interval, birth weight interval),
+    mapping to the corresponding LBWSG category.
+    """
+    MISSING_CATEGORY = 'cat212'
+    category_dict[MISSING_CATEGORY] = 'Birth prevalence - [37, 38) wks, [1000, 1500) g'
+    cats = (pd.DataFrame.from_dict(category_dict, orient='index')
+            .reset_index()
+            .rename(columns={'index': 'cat', 0: 'name'}))
+    idx = pd.MultiIndex.from_tuples(cats.name.apply(get_intervals_from_name),
+                                    names=['gestation_time', 'birth_weight'])
+    cats = cats['cat']
+    cats.index = idx
+    return cats
+
