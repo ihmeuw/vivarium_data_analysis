@@ -1,24 +1,45 @@
 import pandas as pd, numpy as np
 import lbwsg
+from collections import namedtuple
 
-lbwsg_distribution = None
+# Class to store and name the arguments passed to main()
+Args = namedtuple('Args', "location, artifact_path, year, draws, num_simulants")
 
-def do_back_of_envelope_calculation(artifact_path, num_simulants, draws):
-    global lbwsg_distribution
-    
+def do_back_of_envelope_calculation(artifact_path, year, draws, num_simulants):
+    """
+    """
     exposure_data = lbwsg.read_lbwsg_data(
-        artifact_path, 'exposure', "year_start == 2017", "age_end < 1", draws=draws
-    )
+        artifact_path, 'exposure', "age_end < 1", "year_start == @year", draws=draws)
     lbwsg_distribution = LBWSGDistribution(exposure_data)
     lbwsg_effect = LBWSGRiskEffect(rr_data, paf_data)
-    bw_shift_distribution = BWShiftDistribution(data_for_distribution)
+    bw_shift_distribution = BWShiftDistribution(data_for_distribution) # depends on location
+    # responsible for determining who is covered and what their corresponding birthweight shift will be
+    iron_intervention = IronFortificationIntervention(coverage_data, bw_shift_distribution)
+
+    # Create baseline population and assign demographic data
+#     baseline_pop = initialize_population_table(num_simulants, draws)
+#     simulant_ids = range(num_simulants)
+    baseline_pop = pd.DataFrame(index=pd.MultiIndex.from_product(
+        [range(num_simulants), draws], names=['simulant_id', 'draw']))
+    assign_sex(baseline_pop)
+    assign_age(baseline_pop)
+
+    # Assign baseline exposure
+    lbwsg_distribution.assign_exposure(baseline_pop)
+    baseline_coverage = iron_intervention.baseline_coverage_proportion()
+    mean_bw_shift = bw_shift_distribution.mean()
+    lbwsg_distribution.assign_treatment_deleted_birthweight(baseline_pop, baseline_coverage, mean_bw_shift)
+    iron_intervention.assign_fortification_propensity(baseline_pop)
     
-    # Create baseline population and do calculations
-    baseline_pop = initialize_population_table(num_simulants, draws)
+    # Create intervention population - all the above data will be the same in intervention
+    intervention_pop = baseline_pop.copy()
     
-    lbwsg_distribution.stratify_baseline_pop(baseline_pop, bw_shift_distribution)
-    lbwsg_effect.assign_relative_risks(baseline_pop)
-    # Now calculate csmr's...
+    # For each scenario
+    for pop in (baseline_pop, intervention_pop):
+        iron_intervention.assign_birthweight_shifts(pop)
+        lbwsg_distribution.shift_birthweights(pop)
+        lbwsg_effect.assign_relative_risks(pop)
+        # Now calculate csmr's...
     
     # Create intervention population and do calculations
     intervention_pop = pop.copy()
@@ -31,17 +52,17 @@ def do_back_of_envelope_calculation(artifact_path, num_simulants, draws):
     # Finally, calculate reduction in mortality...
 
 
-def initialize_population_table(num_simulants, draws):
-    """
-    Initialize a population table with a gestational age and birthweight for each simulant.
-    """
-    simulant_ids = range(num_simulants)
-    pop = pd.DataFrame(index=pd.MultiIndex.from_product([simulant_ids, draws],names=['simulant_id', 'draw']))
-    assign_sex(pop)
-    assign_age(pop)
+# def initialize_population_table(num_simulants, draws):
+#     """
+#     Initialize a population table with a gestational age and birthweight for each simulant.
+#     """
+#     simulant_ids = range(num_simulants)
+#     pop = pd.DataFrame(index=pd.MultiIndex.from_product([simulant_ids, draws],names=['simulant_id', 'draw']))
+#     assign_sex(pop)
+#     assign_age(pop)
     
-    lbwsg_distribution.assign_exposure(pop)
-    return pop
+#     lbwsg_distribution.assign_exposure(pop)
+#     return pop
 
 def assign_sex(pop):
     pop['sex'] = np.random.choice(['Male', 'Female'], size=len(pop))
@@ -53,11 +74,18 @@ def assign_age(pop):
     
 def parse_args(args):
     """"""
-    location = "nigeria"
-    artifact_path = f'/share/costeffectiveness/artifacts/vivarium_conic_lsff/{location}.hdf'
-    num_simulants = 10
-    draws = [0,50,100]
-    return artifact_path, num_simulants, draws
+    if len(args)>0:
+        # Don't do any parsing for now, just make args into a named tuple
+        args = Args._make(args)
+    else:
+        # Hardcode some values for testing
+        location = "nigeria"
+        artifact_path = f'/share/costeffectiveness/artifacts/vivarium_conic_lsff/{location}.hdf'
+        year=2017
+        draws = [0,50,100]
+        num_simulants = 10
+        args = Args(location, artifact_path, year, draws, num_simulants)
+    return args
 
 def main(args=None):
     """
@@ -66,5 +94,6 @@ def main(args=None):
     if args is None:
         args = sys.argv[1:]
         
-    artifact_path, num_simulants, draws = parse_args(args)
-    do_back_of_envelope_calculation(artifact_path, num_simulants, draws)
+    args = parse_args(args)
+    do_back_of_envelope_calculation(args.artifact_path, args.year, args.draws, args.num_simulants)
+
