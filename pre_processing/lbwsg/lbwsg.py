@@ -5,7 +5,7 @@ LBWSG component in Vivarium Public Health:
 https://github.com/ihmeuw/vivarium_public_health/blob/master/src/vivarium_public_health/risks/implementations/low_birth_weight_and_short_gestation.py
 """
 
-import pandas as pd
+import pandas as pd, numpy as np
 import re
 from typing import Tuple#, Dict, Iterable
 import gbd_mapping as gbd
@@ -74,6 +74,21 @@ def read_lbwsg_data(artifact_path, measure, *filter_terms, draws='all'):
 
     return pd.concat(draw_data_dfs, axis=1, copy=False).set_index(index_cols.columns.to_list())
 
+def convert_draws_to_long_form(data, name='value', copy=True):
+    """
+    Converts GBD data stored with one column per draw to "long form" with a 'draw' column wihch specifies the draw.
+    """
+    if copy:
+        data = data.copy()
+#     draw_cols = data.columns.filter(like='draw').columns
+#     index_columns = data.columns.difference(draw_cols)
+    data.columns = data.columns.str.replace('draw_', '')
+    data.columns.rename('draw', inplace=True)
+    data.columns = data.columns.astype(int)
+    data = data.stack()
+    data.rename(name, inplace=True)
+    return data.reset_index()
+
 def get_intervals_from_name(name: str) -> Tuple[pd.Interval, pd.Interval]:
     """Converts a LBWSG category name to a pair of intervals.
 
@@ -110,15 +125,17 @@ def get_ga_bw_by_category(include_missing=True):
     if include_missing:
         cats.update(MISSING_CATEGORY)
     cats = pd.Series(cats)
-    #Example string to extract from: 'Birth prevalence - [0, 24) wks, [0, 500) g'
-    return cats.str.extract(r'Birth prevalence - \[(?P<ga_start>\d+), (?P<ga_end>\d+)\) wks, \[(?P<bw_start>\d+), (?P<bw_end>\d+)\) g')
-#     return cats.str.extract(r'.*\[(?P<ga_start>\d+), (?P<ga_end>\d+).*\[(?P<bw_start>\d+), (?P<bw_end>\d+).*')
+    # Example string to extract from: 'Birth prevalence - [0, 24) wks, [0, 500) g'
+    # extraction_regex = r'.*\[(?P<ga_start>\d+), (?P<ga_end>\d+).*\[(?P<bw_start>\d+), (?P<bw_end>\d+).*' # this also works
+    extraction_regex = r'Birth prevalence - \[(?P<ga_start>\d+), (?P<ga_end>\d+)\) wks, \[(?P<bw_start>\d+), (?P<bw_end>\d+)\) g'
+    return cats.str.extract(extraction_regex).astype(int,copy=False)
 
-class LBWSGDistribution():
+class LBWSGDistribution:
     """
     Class to assign and adjust birthweights and gestational ages of a simulated population.
     """
-    def __init__(self):
+    def __init__(self, exposure_data):
+        self.exposure_dist = convert_draws_to_long_form(exposure_data, name='value')
         self.cat_df = get_ga_bw_by_category()
         self.cat_df['ga_width'] = self.cat_df['ga_end'] - self.cat_df['ga_start']
         self.cat_df['bw_width'] = self.cat_df['bw_end'] - self.cat_df['bw_start']
@@ -169,3 +186,22 @@ class LBWSGDistribution():
         assert len(t) >= 1
         return t.index[0]
 
+    def assign_exposure(self, pop):
+        """
+        Assign birthweights and gestational ages to each simulant in the population based on
+        this object's distribution.
+        """
+        # Based on simulant's age and sex, assign a random LBWSG category from GBD distribution
+#         enn_pop = pop.query("age < 7/365") # age start == 0
+#         lnn_pop = pop.query("7/365 <= age < 28/365") # age_start == 7/365
+        # Index levels: location  sex  age_start  age_end   year_start  year_end  parameter
+
+        for (sex, age_start, draw), group in pop.groupby(['sex', 'age_start', 'draw']):
+#         for x in pop.groupby([sex, age_group_start, draw]):
+#             print(x)
+            cat_dist = self.exposure_dist.query("sex==@sex and age_start==@age_start and draw==@draw")
+            pop.loc[group.index, 'lbwsg_cat'] = np.random.choice(cat_dist['parameter'], size=len(group), p=cat_dist['value'])
+
+#         pop.merge(self.exposure_dist)
+#         idx = pd.IndexSlice
+#         distribution.loc[]
