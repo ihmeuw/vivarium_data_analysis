@@ -8,14 +8,28 @@ Args = namedtuple('Args', "location, artifact_path, year, draws, num_simulants")
 def do_back_of_envelope_calculation(artifact_path, year, draws, num_simulants):
     """
     """
+    pass
+
+def get_model_components(location, artifact_path, year, draws):
+    """
+    
+    """
     exposure_data = lbwsg.read_lbwsg_data(
         artifact_path, 'exposure', "age_end < 1", "year_start == @year", draws=draws)
+    rr_data = lbwsg.read_lbwsg_data(
+        artifact_path, 'relative_risk', "age_end < 1", "year_start == @year", draws=draws)
     lbwsg_distribution = LBWSGDistribution(exposure_data)
-    lbwsg_effect = LBWSGRiskEffect(rr_data, paf_data)
-    bw_shift_distribution = BWShiftDistribution(data_for_distribution) # depends on location
-    # responsible for determining who is covered and what their corresponding birthweight shift will be
-    iron_intervention = IronFortificationIntervention(coverage_data, bw_shift_distribution)
+    lbwsg_effect = LBWSGRiskEffect(rr_data, paf_data=None)
+#     bw_shift_distribution = BWShiftDistribution(data_for_distribution) # depends on location
+#     # responsible for determining who is covered and what their corresponding birthweight shift will be
+#     iron_intervention = IronFortificationIntervention(coverage_data, bw_shift_distribution)
+    baseline_fortification = IronFortificationIntervention(location, ('eats_fortified', 'mean'))
+    intervention_fortification = IronFortificationIntervention(location, ('eats_fortifiable', 'mean'))
+    model_components = () # create a namedtuple??
+    return model_components
 
+def initialize_population_tables(model_components, num_simulants):
+    """"""
     # Create baseline population and assign demographic data
 #     baseline_pop = initialize_population_table(num_simulants, draws)
 #     simulant_ids = range(num_simulants)
@@ -23,13 +37,17 @@ def do_back_of_envelope_calculation(artifact_path, year, draws, num_simulants):
         [range(num_simulants), draws], names=['simulant_id', 'draw']))
     assign_sex(baseline_pop)
     assign_age(baseline_pop)
+    assign_propensity(baseline_pop, IronFortificationIntervention.propensity_name)
 
     # Assign baseline exposure
+    
+    # Ideally this would be done with a propensity to share between scenarios, but that's more complicated to implement
     lbwsg_distribution.assign_exposure(baseline_pop)
-    baseline_coverage = iron_intervention.baseline_coverage_proportion()
-    mean_bw_shift = bw_shift_distribution.mean()
-    lbwsg_distribution.assign_treatment_deleted_birthweight(baseline_pop, baseline_coverage, mean_bw_shift)
-    iron_intervention.assign_fortification_propensity(baseline_pop)
+#     baseline_coverage = iron_intervention.baseline_coverage_proportion()
+#     mean_bw_shift = bw_shift_distribution.mean()
+#     lbwsg_distribution.assign_treatment_deleted_birthweight(baseline_pop, baseline_coverage, mean_bw_shift)
+    baseline_fortification.assign_treatment_deleted_birthweight(baseline_pop, lbwsg_distribution)
+    #iron_intervention.assign_fortification_propensity(baseline_pop)
     
     # Create intervention population - all the above data will be the same in intervention
     intervention_pop = baseline_pop.copy()
@@ -40,14 +58,6 @@ def do_back_of_envelope_calculation(artifact_path, year, draws, num_simulants):
         lbwsg_distribution.shift_birthweights(pop)
         lbwsg_effect.assign_relative_risks(pop)
         # Now calculate csmr's...
-    
-    # Create intervention population and do calculations
-    intervention_pop = pop.copy()
-    bw_shift_distribution.assign_shifts(intervention_pop)
-    lbwsg_distribution.shift_birthweights(intervention_pop, bw_shift_distribution)
-    lbwsg_effect.assign_relative_risks(intervention_pop)
-    # Now calculate csmr's...
-    
     
     # Finally, calculate reduction in mortality...
 
@@ -72,6 +82,15 @@ def assign_age(pop):
     pop['age_start'] = 0
     pop['age_end'] = 7/365
     
+def assign_propensity(pop, propensity_name):
+    """Assigns an independent uniform random number to each (simulant,draw) pair.
+    Enables sharing randomness across scenarios.
+    """
+    pop[propensity_name] = np.random.uniform(size=len(pop))
+    
+def compute_population_impact_fraction(baseline_pop, counterfactual_pop):
+    pass
+    
 def parse_args(args):
     """"""
     if len(args)>0:
@@ -79,8 +98,8 @@ def parse_args(args):
         args = Args._make(args)
     else:
         # Hardcode some values for testing
-        location = "nigeria"
-        artifact_path = f'/share/costeffectiveness/artifacts/vivarium_conic_lsff/{location}.hdf'
+        location = "Nigeria"
+        artifact_path = f'/share/costeffectiveness/artifacts/vivarium_conic_lsff/{location.lower()}.hdf'
         year=2017
         draws = [0,50,100]
         num_simulants = 10
