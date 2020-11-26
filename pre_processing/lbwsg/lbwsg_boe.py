@@ -41,7 +41,8 @@ def initialize_population_tables(model_components, num_simulants):
 
     # Assign baseline exposure
     
-    # Ideally this would be done with a propensity to share between scenarios, but that's more complicated to implement
+    # Ideally this would be done with a propensity to share between scenarios,
+    # but that's more complicated to implement, so I'll just copy the table after assigning lbwsg exposure
     lbwsg_distribution.assign_exposure(baseline_pop)
 #     baseline_coverage = iron_intervention.baseline_coverage_proportion()
 #     mean_bw_shift = bw_shift_distribution.mean()
@@ -52,14 +53,24 @@ def initialize_population_tables(model_components, num_simulants):
     # Create intervention population - all the above data will be the same in intervention
     intervention_pop = baseline_pop.copy()
     
-    # For each scenario
-    for pop in (baseline_pop, intervention_pop):
-        iron_intervention.assign_birthweight_shifts(pop)
-        lbwsg_distribution.shift_birthweights(pop)
-        lbwsg_effect.assign_relative_risks(pop)
-        # Now calculate csmr's...
+#     # Maybe do this explicitly instead to make sure everything is working...
+#     intervention_fortification.assign_treatment_deleted_birthweight(intervention_pop, lbwsg_distribution)
+    
+    # Apply the birthweight shifts in baseline and intervention scenarios
+    baseline_fortification.assign_treated_birthweights(baseline_pop, lbwsg_distribution)
+    intervention_fortification.assign_treated_birthweights(intervention_pop, lbwsg_distribution)
+
+#     # For each scenario
+#     for pop in (baseline_pop, intervention_pop):
+#         iron_intervention.assign_birthweight_shifts(pop)
+#         lbwsg_distribution.shift_birthweights(pop)
+#         lbwsg_effect.assign_relative_risks(pop)
+#         # Now calculate csmr's...
+
     
     # Finally, calculate reduction in mortality...
+    
+    return namedtuple('InitPopTables', 'baseline, iron_fortification')(baseline_pop, intervention_pop)
 
 
 # def initialize_population_table(num_simulants, draws):
