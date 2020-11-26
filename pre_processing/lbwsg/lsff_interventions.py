@@ -57,9 +57,11 @@ def calculate_birthweight_shift(dose_response, iron_concentration, daily_flour):
     """
     return (dose_response/10)*(iron_concentration)*(daily_flour/1_000)
 
-# Import dataframe storing wheat flour fortification coverage parameters
-# Eventually, this will need to be updated to incorporate data from more countries.
-coverage_df = lsff_plots.get_coverage_dfs()['flour'].T
+def get_flour_coverage_df():
+    """Return the dataframe of flour fortification coverage."""
+    # Import dataframe storing wheat flour fortification coverage parameters from lsff_plots.
+    # Eventually, this will need to be updated to incorporate data from more countries.
+    return lsff_plots.get_coverage_dfs()['flour'].T
 
 class IronFortificationIntervention:
     """
@@ -87,10 +89,11 @@ class IronFortificationIntervention:
         flour_consumption = sample_flour_consumption(10_000)
         mean_bw_shift = calculate_birthweight_shift(self.dose_response, self.iron_conc, flour_consumption).mean()
         # Shift everyone's birthweight down by the average shift
-        pop['treatment_deleted_birthweight'] = lbwsg_distribution.apply_birthweight_shift(
-            pop, - self.baseline_coverage * mean_bw_shift)
+        # TODO: actually, maybe we don't need to store the treatment-deleted category, only the treated categories
+        pop.loc[:,['treatment_deleted_birthweight', 'treatment_deleted_lbwsg_cat']] = \
+            lbwsg_distribution.apply_birthweight_shift(pop, -self.baseline_coverage * mean_bw_shift).values
         
-    def assign_treated_birthweights(self, pop, lbwsg_distribution):
+    def assign_treated_birthweight(self, pop, lbwsg_distribution):
         """
         Assigns birthweights resulting after iron fortification is implemented.
         """
@@ -101,6 +104,7 @@ class IronFortificationIntervention:
         pop['mother_daily_flour'] = pop['mother_is_iron_fortified'] * sample_flour_consumption(len(pop))
         pop['birthweight_shift'] = calculate_birthweight_shift(self.dose_response, self.iron_conc, pop['mother_daily_flour'])
         pop['treated_birthweight'] = lbwsg_distribution.apply_birthweight_shift(pop, pop['birthweight_shift'])
+        pop['treated_lbwsg_cat'] = 5 #FIXME
         
     
     
