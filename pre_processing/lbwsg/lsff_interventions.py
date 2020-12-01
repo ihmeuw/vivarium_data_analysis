@@ -14,8 +14,8 @@ from plots_and_other_misc import lsff_plots
 # Eventually this should be stored in some external data source that will then be loaded.
 iron_conc_distributions = {
     'India': stats.uniform(loc=14, scale=21.5-14), # Uniform(14,21.5) mg iron as NaFeEDTA per kg flour
-    'Ethiopia': stats.bernoulli(p=0,loc=30) # 30 mg iron as NaFeEDTA per kg flour,
-    'Nigeria': stats.bernoulli(p=0,loc=40) # 40 mg iron as NaFeEDTA per kg flour,
+    'Ethiopia': stats.bernoulli(p=0,loc=30), # 30 mg iron as NaFeEDTA per kg flour,
+    'Nigeria': stats.bernoulli(p=0,loc=40), # 40 mg iron as NaFeEDTA per kg flour,
 }
 
 def sample_flour_consumption(sample_size):

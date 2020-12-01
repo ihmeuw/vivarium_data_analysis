@@ -6,7 +6,19 @@ from lbwsg import LBWSGDistribution, LBWSGRiskEffect
 from lsff_interventions import IronFortificationIntervention
 
 # Class to store and name the arguments passed to main()
-Args = namedtuple('Args', "location, artifact_path, year, draws, num_simulants")
+ParsedArgs = namedtuple('ParsedArgs', "location, artifact_path, year, draws, num_simulants")
+
+def initialize_population_table(draws, num_simulants):
+    """Creates populations for baseline scenario and iron fortification intervention scenario,
+    assigns birthweights and gestational ages to each simulant, shifts birthweights appropriately,
+    and assigns relative risks for mortality based on resulting LBWSG categories.
+    """
+    # Create baseline population and assign demographic data
+    pop = pd.DataFrame(index=pd.MultiIndex.from_product(
+        [draws, range(num_simulants)], names=['draw', 'simulant_id']))
+    assign_sex(pop)
+    assign_age(pop)
+    return pop
 
 def assign_sex(pop):
     pop['sex'] = np.random.choice(['Male', 'Female'], size=len(pop))
@@ -61,7 +73,7 @@ class IronBirthweightNanoSim:
         """
         # Create baseline population and assign demographic data
         baseline_pop = pd.DataFrame(index=pd.MultiIndex.from_product(
-            [range(num_simulants), self.draws], names=['simulant_id', 'draw']))
+            [self.draws, range(num_simulants)], names=['draw', 'simulant_id']))
         assign_sex(baseline_pop)
         assign_age(baseline_pop)
 
@@ -119,7 +131,7 @@ def parse_args(args):
     """"""
     if len(args)>0:
         # Don't do any parsing for now, just make args into a named tuple
-        args = Args._make(args)
+        args = ParsedArgs._make(args)
     else:
         # Hardcode some values for testing
         location = "Nigeria"
@@ -127,7 +139,7 @@ def parse_args(args):
         year=2017
         draws = [0,50,100]
         num_simulants = 10
-        args = Args(location, artifact_path, year, draws, num_simulants)
+        args = ParsedArgs(location, artifact_path, year, draws, num_simulants)
     return args
 
 def main(args=None):
@@ -138,7 +150,7 @@ def main(args=None):
         args = sys.argv[1:]
         
     args = parse_args(args)
-    sim = IronBirthweightNanoSim(args.location args.artifact_path, args.year, args.draws)
+    sim = IronBirthweightNanoSim(args.location, args.artifact_path, args.year, args.draws)
     baseline_pop, intervention_pop = sim.initialize_population_tables(args.num_simulants)
     pif = population_impact_fraction(baseline_pop, intervention_pop, IronBirthweightNanoSim.treated_lbwsg_rr_colname)
     # do something with pif...
