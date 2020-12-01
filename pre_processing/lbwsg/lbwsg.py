@@ -188,6 +188,8 @@ class LBWSGDistribution:
         return ga, bw
     
     def assign_ga_bw_from_propensities_within_cat(self, pop, category_column):
+        # Merge pop with cat_df to get function composition pop.index -> category -> category data
+        # Unfortunately merging erases the index, so we have to manually reset it to pop.index
         df = pop.reset_index().merge(self.cat_df, left_on=category_column, right_on='category').set_index(pop.index.names)
         pop['gestataional_age'] = df['ga_start'] + pop['ga_propensity'] * df['ga_width']
         pop['birth_weight'] = df['bw_start'] + pop['bw_propensity'] * df['bw_width']
@@ -219,42 +221,23 @@ class LBWSGDistribution:
         this object's distribution.
         """
         # Based on simulant's age and sex, assign a random LBWSG category from GBD distribution
-#         enn_pop = pop.query("age < 7/365") # age start == 0
-#         lnn_pop = pop.query("7/365 <= age < 28/365") # age_start == 7/365
         # Index levels: location  sex  age_start  age_end   year_start  year_end  parameter
-
         for (draw, sex, age_start), group in pop.groupby(['draw', 'sex', 'age_start']):
-#         for x in pop.groupby([sex, age_group_start, draw]):
-#             print(x)
             cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
             pop.loc[group.index, 'lbwsg_cat'] = \
                 np.random.choice(cat_dist['category'], size=len(group), p=cat_dist['prevalence'])
         
-#         ga_bw_propensities = np.random.uniform(size=(len(pop),2))
-#         pop['ga_propensity'] = ga_bw_propensities[:,0]
-#         pop['bw_propensity'] = ga_bw_propensities[:,1]
-        ga_bw_propensity = pd.DataFrame(np.random.uniform(size=(len(pop),2)),
-                                        index=pop.index, columns=['ga_propensity','bw_propensity'])
-        pop = pop.merge(ga_bw_propensity, left_index=True, right_index=True, copy=False)
+        # Assign propensities for ga and bw, and use them to assign a ga and bw within each category
+        ga_bw_propensities = np.random.uniform(size=(len(pop),2))
+        pop['ga_propensity'] = ga_bw_propensities[:,0]
+        pop['bw_propensity'] = ga_bw_propensities[:,1]
         self.assign_ga_bw_from_propensities_within_cat(pop, 'lbwsg_cat')
-        
-#         ga_bw_propensity = np.random.uniform(size=(len(pop),2))
-#         ga, bw = self.cat_to_ga_bw(pop['lbwsg_cat'].values, ga_bw_propensity[:,0], ga_bw_propensity[:,1])
-#         pop['gestational_age'] = ga
-#         pop['birthweight'] = bw
         
 #         ga_bw_propensity = pd.DataFrame(np.random.uniform(size=(len(pop),2)),
 #                                         index=pop.index, columns=['ga_propensity','bw_propensity'])
 #         ga_bw_propensity['category'] = pop['lbwsg_cat']
 #         self.assign_ga_bw_from_propensities_within_cat(ga_bw_propensity, 'category')
 #         # Now need to copy columns to pop...
-       
-        
-
-# #         pop.merge(self.exposure_dist)
-# #         idx = pd.IndexSlice
-# #         distribution.loc[]
-#         return ga_bw_propensity
 
 class LBWSGRiskEffect:
     pass
