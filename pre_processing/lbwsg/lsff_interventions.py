@@ -90,9 +90,9 @@ class IronFortificationIntervention:
         mean_bw_shift = calculate_birthweight_shift(self.dose_response, self.iron_conc, flour_consumption).mean()
         # Shift everyone's birthweight down by the average shift
         # TODO: actually, maybe we don't need to store the treatment-deleted category, only the treated categories
-        pop.loc[:,['treatment_deleted_birthweight', 'treatment_deleted_lbwsg_cat']] = \
-            lbwsg_distribution.apply_birthweight_shift(pop, -self.baseline_coverage * mean_bw_shift).values
-        
+        shifted_pop = lbwsg_distribution.apply_birthweight_shift(pop, -self.baseline_coverage * mean_bw_shift)
+        pop['treatment_deleted_birthweight'] = shifted_pop['new_birthweight']
+
     def assign_treated_birthweight(self, pop, lbwsg_distribution):
         """
         Assigns birthweights resulting after iron fortification is implemented.
@@ -103,8 +103,10 @@ class IronFortificationIntervention:
         # then index to the relevant rows and reassign.
         pop['mother_daily_flour'] = pop['mother_is_iron_fortified'] * sample_flour_consumption(len(pop))
         pop['birthweight_shift'] = calculate_birthweight_shift(self.dose_response, self.iron_conc, pop['mother_daily_flour'])
-        pop['treated_birthweight'] = lbwsg_distribution.apply_birthweight_shift(pop, pop['birthweight_shift'])
-        pop['treated_lbwsg_cat'] = 5 #FIXME
+        shifted_pop = lbwsg_distribution.apply_birthweight_shift(
+            pop, pop['birthweight_shift'], bw_col='treatment_deleted_birthweight')
+        pop['treated_birthweight'] = shifted_pop['new_birthweight'] 
+        pop['treated_lbwsg_cat'] = shifted_pop['new_lbwsg_cat']
         
     
     

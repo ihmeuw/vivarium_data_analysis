@@ -84,9 +84,8 @@ def convert_draws_to_long_form(data, name='value', copy=True):
 #     draw_cols = data.filter(like='draw').columns
 #     index_columns = data.columns.difference(draw_cols)
 #     data.set_index(index_columns.to_list())
-    data.columns = data.columns.str.replace('draw_', '')
+    data.columns = data.columns.str.replace('draw_', '').astype(int)
     data.columns.rename('draw', inplace=True)
-    data.columns = data.columns.astype(int)
     data = data.stack()
     data.rename(name, inplace=True)
     return data.reset_index()
@@ -246,10 +245,21 @@ class LBWSGDistribution:
         birthweight and category (note that this strategy is only reasonable for small shifts).
         """
         index_cols = pop.index.names
-#         data_cols = ['gestational_age', 'birthweight']
-#         shifted_bw = (pop['birthweight'] + shift).to_frame(name='shifted_birthweight')
-        new_bw_col = f'new_{bw_col}'
-        pop = pop[[ga_col, bw_col]].assign(**{new_bw_col: pop['birthweight'] + shift})
+        pop = pop[[ga_col, bw_col]]
+        # Name the new column 'new_birthweight', but rename the existing column if that's what it's called already
+        # TODO: Maybe just prepend (or append?) 'shifted' instead, so that the original column name stays the same.
+        # Or allow passing a prefix or suffix.
+        if bw_col == 'new_birthweigh':
+            pop = pop.rename(columns={bw_col: 'old_new_birthweight'})
+        new_bw_col = 'new_birthweight'
+        # Throws warning: "A value is trying to be set on a copy of a slice from a DataFrame."
+#         pop.loc[:, new_bw_col] = pop[bw_col] + shift 
+        pop = pop.assign(**{new_bw_col: pop[bw_col] + shift})
+        # TODO: Factor out some of the below code into a new function,
+        # e.g. assign_category_for_ga_bw(pop, bw_col, ga_col, cat_col)
+        # TODO: Also, return additional columns, e.g. the original category, and whether the category has changed
+        # Categories should be compute using the proposed function above, rather than relying on what's already
+        # stored in pop
         pop = pop.reset_index().set_index([ga_col, new_bw_col])
         in_bounds = self.cat_df.index.get_indexer(pop.index) != -1
         pop['valid_shift'] = in_bounds
