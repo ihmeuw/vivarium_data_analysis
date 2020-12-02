@@ -239,25 +239,26 @@ class LBWSGDistribution:
 #         self.assign_ga_bw_from_propensities_within_cat(ga_bw_propensity, 'category')
 #         # Now need to copy columns to pop...
 
-    def apply_birthweight_shift(self, pop, shift):
+    def apply_birthweight_shift(self, pop, shift, bw_col='birthweight', ga_col='gestational_age'):
         """
         Applies the specified birthweight shift to the population, and finds the new LBWSG category.
         If a simulant would be shifted out of range of the valid categories, they remain at their original
         birthweight and category (note that this strategy is only reasonable for small shifts).
         """
         index_cols = pop.index.names
-        data_cols = ['gestational_age', 'birthweight']
+#         data_cols = ['gestational_age', 'birthweight']
 #         shifted_bw = (pop['birthweight'] + shift).to_frame(name='shifted_birthweight')
-        pop = pop[data_cols].assign(new_birthweight=pop['birthweight'] + shift)
-        pop = pop.reset_index().set_index(['gestational_age', 'new_birthweight'])
+        new_bw_col = f'new_{bw_col}'
+        pop = pop[[ga_col, bw_col]].assign(**{new_bw_col: pop['birthweight'] + shift})
+        pop = pop.reset_index().set_index([ga_col, new_bw_col])
         in_bounds = self.cat_df.index.get_indexer(pop.index) != -1
-#         return pop.loc[in_bounds]
+        pop['valid_shift'] = in_bounds
         pop.loc[in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[in_bounds].index, 'category'].values
-        pop = pop.reset_index('new_birthweight').set_index('birthweight', append=True)
+        pop = pop.reset_index(new_bw_col).set_index(bw_col, append=True)
         pop.loc[~in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[~in_bounds].index, 'category'].values
 #         pop.loc[~in_bounds, 'new_lbwsg_cat'] = pop.loc[~in_bounds, 'lbwsg_cat']
         pop = pop.reset_index()
-        pop.loc[~in_bounds, 'new_birthweight'] = pop.loc[~in_bounds, 'birthweight'].values
+        pop.loc[~in_bounds, new_bw_col] = pop.loc[~in_bounds, bw_col].values
         return pop.set_index(index_cols)
         
         
