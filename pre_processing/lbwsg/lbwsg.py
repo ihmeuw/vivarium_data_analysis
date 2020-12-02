@@ -72,7 +72,7 @@ def read_lbwsg_data(artifact_path, measure, *filter_terms, draws='all'):
             draw_data = draw_data[index_cols.index] # filter to query on index columns
             draw_data_dfs.append(draw_data)
 
-    print(index_cols.columns)
+#     print(index_cols.columns)
     return pd.concat(draw_data_dfs, axis=1, copy=False).set_index(index_cols.columns.to_list())
 
 def convert_draws_to_long_form(data, name='value', copy=True):
@@ -191,8 +191,8 @@ class LBWSGDistribution:
         # Merge pop with cat_df to get function composition pop.index -> category -> category data
         # Unfortunately merging erases the index, so we have to manually reset it to pop.index
         df = pop.reset_index().merge(self.cat_df, left_on=category_column, right_on='category').set_index(pop.index.names)
-        pop['gestataional_age'] = df['ga_start'] + pop['ga_propensity'] * df['ga_width']
-        pop['birth_weight'] = df['bw_start'] + pop['bw_propensity'] * df['bw_width']
+        pop['gestational_age'] = df['ga_start'] + pop['ga_propensity'] * df['ga_width']
+        pop['birthweight'] = df['bw_start'] + pop['bw_propensity'] * df['bw_width']
     
     def ga_bw_to_cat(self, ga, bw):
         """Map from (birth weight, gestational age) to category name.
@@ -238,6 +238,30 @@ class LBWSGDistribution:
 #         ga_bw_propensity['category'] = pop['lbwsg_cat']
 #         self.assign_ga_bw_from_propensities_within_cat(ga_bw_propensity, 'category')
 #         # Now need to copy columns to pop...
+
+    def apply_birthweight_shift(self, pop, shift):
+        """
+        Applies the specified birthweight shift to the population, and finds the new LBWSG category.
+        If a simulant would be shifted out of range of the valid categories, they remain at their original
+        birthweight and category (note that this strategy is only reasonable for small shifts).
+        """
+        index_cols = pop.index.names
+        data_cols = ['gestational_age', 'birthweight']
+#         shifted_bw = (pop['birthweight'] + shift).to_frame(name='shifted_birthweight')
+        pop = pop[data_cols].assign(new_birthweight=pop['birthweight'] + shift)
+        pop = pop.reset_index().set_index(['gestational_age', 'new_birthweight'])
+        in_bounds = self.cat_df.index.get_indexer(pop.index) != -1
+#         return pop.loc[in_bounds]
+        pop.loc[in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[in_bounds].index, 'category'].values
+        pop = pop.reset_index('new_birthweight').set_index('birthweight', append=True)
+        pop.loc[~in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[~in_bounds].index, 'category'].values
+#         pop.loc[~in_bounds, 'new_lbwsg_cat'] = pop.loc[~in_bounds, 'lbwsg_cat']
+        pop = pop.reset_index()
+        pop.loc[~in_bounds, 'new_birthweight'] = pop.loc[~in_bounds, 'birthweight'].values
+        return pop.set_index(index_cols)
+        
+        
+        
 
 class LBWSGRiskEffect:
     pass
