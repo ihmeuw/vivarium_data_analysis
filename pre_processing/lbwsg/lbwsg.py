@@ -185,34 +185,13 @@ class LBWSGDistribution:
         bw = self.cat_df.loc[cat, 'bw_start'] + p2 * self.cat_df.loc[cat, 'bw_width']
 
         return ga, bw
-    
+
     def assign_ga_bw_from_propensities_within_cat(self, pop, category_column):
         # Merge pop with cat_df to get function composition pop.index -> category -> category data
         # Unfortunately merging erases the index, so we have to manually reset it to pop.index
         df = pop.reset_index().merge(self.cat_df, left_on=category_column, right_on='category').set_index(pop.index.names)
         pop['gestational_age'] = df['ga_start'] + pop['ga_propensity'] * df['ga_width']
         pop['birthweight'] = df['bw_start'] + pop['bw_propensity'] * df['bw_width']
-    
-    def ga_bw_to_cat(self, ga, bw):
-        """Map from (birth weight, gestational age) to category name.
-
-        Example usage:
-
-        ga_bw_to_cat(31., 3298.)
-
-        Parameters
-        ----------
-        ga : float (gestational age)
-        bw : float (birth weight)
-
-        Results
-        -------
-        Returns cat for (bw,ga) pair
-        """
-
-        t = self.cat_df.query('@bw >= bw_start and @bw < bw_end and @ga >= ga_start and @ga < ga_end')
-        assert len(t) >= 1
-        return t.index[0]
 
     def assign_exposure(self, pop):
         """
@@ -270,9 +249,28 @@ class LBWSGDistribution:
         pop = pop.reset_index()
         pop.loc[~in_bounds, new_bw_col] = pop.loc[~in_bounds, bw_col].values
         return pop.set_index(index_cols)
-        
-        
-        
+
+    def ga_bw_to_cat(self, ga, bw):
+        """Map from (birth weight, gestational age) to category name.
+
+        Example usage:
+
+        ga_bw_to_cat(31., 3298.)
+
+        Parameters
+        ----------
+        ga : float (gestational age)
+        bw : float (birth weight)
+
+        Results
+        -------
+        Returns cat for (bw,ga) pair
+        """
+
+        t = self.cat_df.query('@bw >= bw_start and @bw < bw_end and @ga >= ga_start and @ga < ga_end')
+        assert len(t) >= 1
+        return t.index[0]
+
 
 class LBWSGRiskEffect:
     def __init__(self, rr_data, paf_data=None):
@@ -289,3 +287,4 @@ class LBWSGRiskEffect:
         ).set_index(pop.index.names)
 #         return df
         pop['lbwsg_relative_risk'] = df['relative_risk']
+

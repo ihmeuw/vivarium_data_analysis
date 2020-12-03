@@ -26,9 +26,27 @@ def sample_flour_consumption(sample_size):
     Currently, the data is hardcoded, but eventually it should be location-dependent.
     The Ethiopia data comes from the Ethiopian National Food Consumption Survey (2013).
     """
+    # TODO: Edit this to simply call the propensity version below
     # Define quartiles in g of flour per day
     q = (0, 77.5, 100, 200, 350.5) # min=0, q1=77.5, q2=100, q3=200, max=350.5
     u = np.random.uniform(0,1,size=sample_size)
+    # Scale the uniform random number to the correct interval based on its quartile
+    return np.select(
+        [u<0.25, u<0.5, u<0.75, u<1],
+        [q[1]*u/0.25, q[1]+(q[2]-q[1])*(u-0.25)/0.25, q[2]+(q[3]-q[2])*(u-0.5)/0.25, q[3]+(q[4]-q[3])*(u-0.75)/0.25]
+    )
+
+def get_flour_consumption_from_propensity(location, propensity):
+    """Get distribution of daily flour consumption (in Ethiopia) based on the specified propensity array.
+    The distribution is uuniform between each quartile: min=0, q1=77.5, q2=100, q3=200, max=350.5
+    This distribution represents individual heterogeneity and currently has no parameter uncertainty.
+
+    Currently, the data is hardcoded, but eventually it should be location-dependent.
+    The Ethiopia data comes from the Ethiopian National Food Consumption Survey (2013).
+    """
+    # Define quartiles in g of flour per day
+    q = (0, 77.5, 100, 200, 350.5) # q0=min=0, q1=77.5, q2=100, q3=200, q4=max=350.5
+    u = propensity # use shorter name for readibility - u ~ uniform(0,1) random number
     # Scale the uniform random number to the correct interval based on its quartile
     return np.select(
         [u<0.25, u<0.5, u<0.75, u<1],
@@ -63,19 +81,48 @@ def get_flour_coverage_df():
     # Eventually, this will need to be updated to incorporate data from more countries.
     return lsff_plots.get_coverage_dfs()['flour'].T
 
+def get_global_data(draws):
+    """
+    Information shared between locations and scenarios. May vary by draw.
+    
+    Returns
+    -------
+    draws
+    dose-response of birthweight for iron (g per additional 10mg iron per day)
+    """
+    pass
+
+def get_location_data(location, global_data):
+    """
+    Information shared between scenarios for a specific location. May vary by draw and location.
+    
+    Returns
+    -------
+    location
+    iron concentration in flour (mg iron as NaFeEDTA per kg flour)
+    ?? mean flour consumption (g per day) -- unneeded if we have mean birthweight shift
+    mean birthweight shift (g)
+    baseline fortification coverage (proportion of population)
+    target fortification coverage (proportion of population)
+    """
+    pass
+
 class IronFortificationIntervention:
     """
     Class for applying iron fortification intervention to simulants.
     """
     propensity_name = 'iron_fortification_propensity'
     
-    def __init__(self, location, basline_coverage, target_coverage):
+    def __init__(self, global_data, location_data):
+        self.global = global_data
+        self.local = location_data
+        # __init__(self, location, baseline_coverage, target_coverage)
         # TODO: Eliminate the distributions in favor of storing a value for each draw (see below)
         self.iron_conc_distribution = iron_conc_distributions[location]
         self.bw_dose_response_distribution = create_bw_dose_response_distribution()
         # TODO: Change constructor to accept the pre-retrieved data instead of looking it up here
         # OR: Instead, pass baseline and target coverage into the functions below...
-        self.baseline_coverage = basline_coverage
+        self.baseline_coverage = baseline_coverage
         self.target_coverage = target_coverage
         
         # Currently these distributions are sampling one value for all draws.
@@ -83,7 +130,15 @@ class IronFortificationIntervention:
         self.dose_response = self.bw_dose_response_distribution.rvs()
         self.iron_concentration = self.iron_conc_distribution.rvs()
     
-    def assign_treatment_deleted_birthweight(self, pop, lbwsg_distribution):
+    def assign_propensities(self, pop):
+        """
+        Assigns propensities to simualants for quantities relevant to this intervention.
+        """
+        propensities = np.random.uniform(size=(len(pop),2))
+        pop['iron_fortification_propensity'] = propensities[:,0]
+        pop['mother_flour_consumption_propensity'] = propensities[:,1]
+    
+    def assign_treatment_deleted_birthweight(self, pop, lbwsg_distribution, baseline_coverage):
         """
         Assigns "treatment-deleted" birthweights to each simulant in the population.
         """
@@ -93,14 +148,14 @@ class IronFortificationIntervention:
         mean_bw_shift = calculate_birthweight_shift(self.dose_response, self.iron_concentration, flour_consumption).mean()
         # Shift everyone's birthweight down by the average shift
         # TODO: actually, maybe we don't need to store the treatment-deleted category, only the treated categories
-        shifted_pop = lbwsg_distribution.apply_birthweight_shift(pop, -self.baseline_coverage * mean_bw_shift)
+        shifted_pop = lbwsg_distribution.apply_birthweight_shift(pop, -baseline_coverage * mean_bw_shift)
         pop['treatment_deleted_birthweight'] = shifted_pop['new_birthweight']
 
-    def assign_treated_birthweight(self, pop, lbwsg_distribution):
+    def assign_treated_birthweight(self, pop, lbwsg_distribution, target_coverage):
         """
         Assigns birthweights resulting after iron fortification is implemented.
         """
-        pop['mother_is_iron_fortified'] = pop[IronFortificationIntervention.propensity_name] < self.target_coverage
+        pop['mother_is_iron_fortified'] = pop['iron_fortification_propensity'] < target_coverage
         # TODO: Can this line be rewritten to avoid sampling flour consumption for rows that will get set to 0?
         # Yes, initialize the column with pop['mother_is_iron_fortified'].astype(float),
         # then index to the relevant rows and reassign.
@@ -110,7 +165,12 @@ class IronFortificationIntervention:
         # current sampling function is based on quantiles - I just need to pass it the propensity instead.
         # However, if we don't care about comparability between scenarios, the current implementation should
         # be sufficient for large enough populations.
-        pop['mother_daily_flour'] = pop['mother_is_iron_fortified'] * sample_flour_consumption(len(pop))
+#         pop['mother_daily_flour'] = pop['mother_is_iron_fortified'] * sample_flour_consumption(len(pop))
+        pop['mother_daily_flour'] = pop['mother_is_iron_fortified'].astype(float)
+        pop.loc[pop.mother_is_iron_fortified, 'mother_daily_flour'] = get_flour_consumption_from_propensity(
+            self.local.location,
+            pop.loc[pop.mother_is_iron_fortified, 'mother_flour_consumption_propensity']
+        )
         pop['birthweight_shift'] = calculate_birthweight_shift(
             self.dose_response, self.iron_concentration, pop['mother_daily_flour'])
         shifted_pop = lbwsg_distribution.apply_birthweight_shift(
