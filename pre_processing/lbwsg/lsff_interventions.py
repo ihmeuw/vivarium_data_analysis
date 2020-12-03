@@ -35,7 +35,7 @@ def sample_flour_consumption(sample_size):
         [q[1]*u/0.25, q[1]+(q[2]-q[1])*(u-0.25)/0.25, q[2]+(q[3]-q[2])*(u-0.5)/0.25, q[3]+(q[4]-q[3])*(u-0.75)/0.25]
     )
 
-def create_bw_dose_response_distribution(self):
+def create_bw_dose_response_distribution():
     """Define normal distribution representing parameter uncertainty of dose-response on birthweight.
     mean = 15.1 g per 10 mg daily iron, 95% CI = (6.0,24.2).
     Effect size comes from Haider et al. (2013)
@@ -69,13 +69,14 @@ class IronFortificationIntervention:
     """
     propensity_name = 'iron_fortification_propensity'
     
-    def __init__(self, location, basline_coverage_key, target_coverage_key):
+    def __init__(self, location, basline_coverage, target_coverage):
         # TODO: Eliminate the distributions in favor of storing a value for each draw (see below)
         self.iron_conc_distribution = iron_conc_distributions[location]
         self.bw_dose_response_distribution = create_bw_dose_response_distribution()
         # TODO: Change constructor to accept the pre-retrieved data instead of looking it up here
-        self.baseline_coverage = coverage_df.loc[location, basline_coverage_key]
-        self.target_coverage = coverage_df.loc[location, target_coverage_key]
+        # OR: Instead, pass baseline and target coverage into the functions below...
+        self.baseline_coverage = basline_coverage
+        self.target_coverage = target_coverage
         
         # Currently these distributions are sampling one value for all draws.
         # TODO: Update to sample a different value for each draw (need to pass draws to constructor).
@@ -86,8 +87,10 @@ class IronFortificationIntervention:
         """
         Assigns "treatment-deleted" birthweights to each simulant in the population.
         """
+        # NOTE: We don't necessarily need to sample flour consumption every time if we could
+        # compute the mean ahead of time... I need to think more about which data varies by draw vs. population...
         flour_consumption = sample_flour_consumption(10_000)
-        mean_bw_shift = calculate_birthweight_shift(self.dose_response, self.iron_conc, flour_consumption).mean()
+        mean_bw_shift = calculate_birthweight_shift(self.dose_response, self.iron_concentration, flour_consumption).mean()
         # Shift everyone's birthweight down by the average shift
         # TODO: actually, maybe we don't need to store the treatment-deleted category, only the treated categories
         shifted_pop = lbwsg_distribution.apply_birthweight_shift(pop, -self.baseline_coverage * mean_bw_shift)
@@ -97,12 +100,19 @@ class IronFortificationIntervention:
         """
         Assigns birthweights resulting after iron fortification is implemented.
         """
-        pop['mother_is_iron_fortified'] = pop[propensity_name] < self.target_coverage
+        pop['mother_is_iron_fortified'] = pop[IronFortificationIntervention.propensity_name] < self.target_coverage
         # TODO: Can this line be rewritten to avoid sampling flour consumption for rows that will get set to 0?
         # Yes, initialize the column with pop['mother_is_iron_fortified'].astype(float),
         # then index to the relevant rows and reassign.
+        # NOTE: If we want to compare intervention to baseline by simulant, we can't sample flour consumption
+        # every time, because simulants who are fortified in baseline should have the same flour consumption
+        # in the intrvention scenario. We'd have to use propensities instead... which is easy because my
+        # current sampling function is based on quantiles - I just need to pass it the propensity instead.
+        # However, if we don't care about comparability between scenarios, the current implementation should
+        # be sufficient for large enough populations.
         pop['mother_daily_flour'] = pop['mother_is_iron_fortified'] * sample_flour_consumption(len(pop))
-        pop['birthweight_shift'] = calculate_birthweight_shift(self.dose_response, self.iron_conc, pop['mother_daily_flour'])
+        pop['birthweight_shift'] = calculate_birthweight_shift(
+            self.dose_response, self.iron_concentration, pop['mother_daily_flour'])
         shifted_pop = lbwsg_distribution.apply_birthweight_shift(
             pop, pop['birthweight_shift'], bw_col='treatment_deleted_birthweight')
         pop['treated_birthweight'] = shifted_pop['new_birthweight'] 

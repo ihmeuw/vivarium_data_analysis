@@ -275,4 +275,17 @@ class LBWSGDistribution:
         
 
 class LBWSGRiskEffect:
-    pass
+    def __init__(self, rr_data, paf_data=None):
+        self.rr_data = convert_draws_to_long_form(rr_data, name='relative_risk')
+        # TODO: Maybe use 'lbwsg_cat' instead of 'category' throughout this module?
+        self.rr_data.rename(columns={'parameter': 'lbwsg_cat'}, inplace=True)
+        self.paf_data = paf_data
+        
+    def assign_relative_risk(self, pop, cat_colname):
+        # TODO: Figure out better method of dealing with category column name...
+        cols_to_match = ['sex', 'age_start', 'draw', cat_colname]
+        df = pop.reset_index().merge(
+            self.rr_data.rename(columns={'lbwsg_cat': cat_colname}), on=cols_to_match
+        ).set_index(pop.index.names)
+#         return df
+        pop['lbwsg_relative_risk'] = df['relative_risk']

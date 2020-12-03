@@ -24,8 +24,8 @@ def assign_sex(pop):
     pop['sex'] = np.random.choice(['Male', 'Female'], size=len(pop))
 
 def assign_age(pop):
-    pop['age'] = 0 # np.random.uniform(0,28/365, size=num_simulants)
-    pop['age_start'] = 0
+    pop['age'] = 0.0 # np.random.uniform(0,28/365, size=num_simulants)
+    pop['age_start'] = 0.0
     pop['age_end'] = 7/365
     
 def assign_propensity(pop, propensity_name):
@@ -34,7 +34,7 @@ def assign_propensity(pop, propensity_name):
     """
     pop[propensity_name] = np.random.uniform(size=len(pop))
 
-class IronBirthweightNanoSim:
+class IronBirthweightCalculator:
     """Class to run nanosimulations for the effect of iron on low birthweight."""
     
     treated_lbwsg_rr_colname = 'treated_lbwsg_rr'
@@ -50,14 +50,14 @@ class IronBirthweightNanoSim:
         
         # Load LBWSG data
         exposure_data = lbwsg.read_lbwsg_data(
-            artifact_path, 'exposure', "age_end < 1", "year_start == @year", draws=draws)
+            artifact_path, 'exposure', "age_end < 1", f"year_start == {year}", draws=draws)
         rr_data = lbwsg.read_lbwsg_data(
-            artifact_path, 'relative_risk', "age_end < 1", "year_start == @year", draws=draws)
+            artifact_path, 'relative_risk', "age_end < 1", f"year_start == {year}", draws=draws)
         
         # Load iron intervention data
         flour_coverage_df = lsff_interventions.get_flour_coverage_df()
-        baseline_coverage = flour_coverage_df.loc[location, ('eats_fortified', 'mean')]
-        intervention_coverage = flour_coverage_df.loc[location, ('eats_fortifiable', 'mean')]
+        baseline_coverage = flour_coverage_df.loc[location, ('eats_fortified', 'mean')] / 100
+        intervention_coverage = flour_coverage_df.loc[location, ('eats_fortifiable', 'mean')] / 100
         
         # Create model components
         self.lbwsg_distribution = LBWSGDistribution(exposure_data)
@@ -72,10 +72,7 @@ class IronBirthweightNanoSim:
         and assigns relative risks for mortality based on resulting LBWSG categories.
         """
         # Create baseline population and assign demographic data
-        baseline_pop = pd.DataFrame(index=pd.MultiIndex.from_product(
-            [self.draws, range(num_simulants)], names=['draw', 'simulant_id']))
-        assign_sex(baseline_pop)
-        assign_age(baseline_pop)
+        baseline_pop = initialize_population_table(self.draws, num_simulants)
 
         # Assign propensities to share between scenarios
         assign_propensity(baseline_pop, IronFortificationIntervention.propensity_name)
@@ -89,16 +86,16 @@ class IronBirthweightNanoSim:
 
         # Apply the birthweight shifts in baseline and intervention scenarios:
         # First comput treatment-deleted birthweight, then birthweight with iron fortification.
-        self.baseline_fortification.assign_treatment_deleted_birthweight(baseline_pop, lbwsg_distribution)
-        intervention_fortification.assign_treatment_deleted_birthweight(intervention_pop, lbwsg_distribution)
+        self.baseline_fortification.assign_treatment_deleted_birthweight(baseline_pop, self.lbwsg_distribution)
+        self.intervention_fortification.assign_treatment_deleted_birthweight(intervention_pop, self.lbwsg_distribution)
 
-        baseline_fortification.assign_treated_birthweight(baseline_pop, lbwsg_distribution)
-        intervention_fortification.assign_treated_birthweight(intervention_pop, lbwsg_distribution)
+        self.baseline_fortification.assign_treated_birthweight(baseline_pop, self.lbwsg_distribution)
+        self.intervention_fortification.assign_treated_birthweight(intervention_pop, self.lbwsg_distribution)
 
         # Compute the LBWSG relative risks in both scenarios - these will be used to compute the PIF
         # TODO: Maybe have lbwsg return the RR values instead, and assign them to the appropriate column here
-        self.lbwsg_effect.assign_relative_risk(baseline_pop)
-        self.lbwsg_effect.assign_relative_risk(intervention_pop)
+        self.lbwsg_effect.assign_relative_risk(baseline_pop, cat_colname='treated_lbwsg_cat')
+        self.lbwsg_effect.assign_relative_risk(intervention_pop, cat_colname='treated_lbwsg_cat')
 
         return namedtuple('InitPopTables', 'baseline, iron_fortification')(baseline_pop, intervention_pop)
 
@@ -150,7 +147,7 @@ def main(args=None):
         args = sys.argv[1:]
         
     args = parse_args(args)
-    sim = IronBirthweightNanoSim(args.location, args.artifact_path, args.year, args.draws)
+    sim = IronBirthweightCalculator(args.location, args.artifact_path, args.year, args.draws)
     baseline_pop, intervention_pop = sim.initialize_population_tables(args.num_simulants)
     pif = population_impact_fraction(baseline_pop, intervention_pop, IronBirthweightNanoSim.treated_lbwsg_rr_colname)
     # do something with pif...
