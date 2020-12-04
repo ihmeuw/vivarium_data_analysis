@@ -6,19 +6,53 @@ sys.path.append(os.path.abspath("../.."))
 from probability import prob_utils
 from plots_and_other_misc import lsff_plots
 
+def create_bw_dose_response_distribution():
+    """Define normal distribution representing parameter uncertainty of dose-response on birthweight.
+    mean = 15.1 g per 10 mg daily iron, 95% CI = (6.0,24.2).
+    Effect size comes from Haider et al. (2013)
+    """
+    # mean and 0.975-quantile of normal distribution for mean difference (MD)
+    mean = 15.1 # g per 10 mg daily iron
+    q_975 = 24.2 # 97.5th percentile
+    std = prob_utils.normal_stdev_from_mean_quantile(mean, q_975, 0.975)
+    # Frozen normal distribution for MD, representing uncertainty in our effect size
+    return stats.norm(mean, std)
+
 # Define distributions of iron concentration in fortified flour for each country,
 # representing parameter uncertainty.
 # Units are mg iron as NaFeEDTA per kg flour
 # Currently we use a uniform distribution for India and degenerate (point mass)
 # distributions for Ethiopia and Nigeria.
 # Eventually this should be stored in some external data source that will then be loaded.
-iron_conc_distributions = {
-    'India': stats.uniform(loc=14, scale=21.5-14), # Uniform(14,21.5) mg iron as NaFeEDTA per kg flour
-    'Ethiopia': stats.bernoulli(p=0,loc=30), # 30 mg iron as NaFeEDTA per kg flour,
-    'Nigeria': stats.bernoulli(p=0,loc=40), # 40 mg iron as NaFeEDTA per kg flour,
-}
+# iron_conc_distributions = {
+#     'India': stats.uniform(loc=14, scale=21.5-14), # Uniform(14,21.5) mg iron as NaFeEDTA per kg flour
+#     'Ethiopia': stats.bernoulli(p=0,loc=30), # 30 mg iron as NaFeEDTA per kg flour,
+#     'Nigeria': stats.bernoulli(p=0,loc=40), # 40 mg iron as NaFeEDTA per kg flour,
+# }
 
-def sample_flour_consumption(sample_size):
+def get_iron_concentration(location, draws):
+    """
+    Get the iron concentration in flour for specified location (mg iron as NaFeEDTA per kg flour),
+    with parameter uncertainty if there is any.
+    
+    Returns
+    -------
+    scalar if there is no uncertainty, or pandas Series indexed by draw if there is uncertainty.
+    """
+    if location == 'India':
+        iron_conc_dist = stats.uniform(loc=14, scale=21.5-14), # Uniform(14,21.5) mg iron as NaFeEDTA per kg flour
+        iron_concentration = pd.Series(
+            iron_conc_dist.rvs(size=len(draws)), index=draws, name='iron_concentration')
+    elif location == 'Ethiopia':
+        iron_concentration = 30 # 30 mg iron as NaFeEDTA per kg flour
+    elif location == 'Nigeria':
+        iron_concentration = 40 # 40 mg iron as NaFeEDTA per kg flour
+    else:
+        raise ValueError(f'Unsupported location: {location}')
+
+    return iron_concentration
+
+def sample_flour_consumption(location, sample_size):
     """Sample from distribution of daily flour consumption (in Ethiopia).
     The distribution is uuniform between each quartile: min=0, q1=77.5, q2=100, q3=200, max=350.5
     This distribution represents individual heterogeneity and currently has no parameter uncertainty.
@@ -26,15 +60,16 @@ def sample_flour_consumption(sample_size):
     Currently, the data is hardcoded, but eventually it should be location-dependent.
     The Ethiopia data comes from the Ethiopian National Food Consumption Survey (2013).
     """
-    # TODO: Edit this to simply call the propensity version below
-    # Define quartiles in g of flour per day
-    q = (0, 77.5, 100, 200, 350.5) # min=0, q1=77.5, q2=100, q3=200, max=350.5
-    u = np.random.uniform(0,1,size=sample_size)
-    # Scale the uniform random number to the correct interval based on its quartile
-    return np.select(
-        [u<0.25, u<0.5, u<0.75, u<1],
-        [q[1]*u/0.25, q[1]+(q[2]-q[1])*(u-0.25)/0.25, q[2]+(q[3]-q[2])*(u-0.5)/0.25, q[3]+(q[4]-q[3])*(u-0.75)/0.25]
-    )
+#     # TODO: Edit this to simply call the propensity version below
+#     # Define quartiles in g of flour per day
+#     q = (0, 77.5, 100, 200, 350.5) # min=0, q1=77.5, q2=100, q3=200, max=350.5
+#     u = np.random.uniform(0,1,size=sample_size)
+#     # Scale the uniform random number to the correct interval based on its quartile
+#     return np.select(
+#         [u<0.25, u<0.5, u<0.75, u<1],
+#         [q[1]*u/0.25, q[1]+(q[2]-q[1])*(u-0.25)/0.25, q[2]+(q[3]-q[2])*(u-0.5)/0.25, q[3]+(q[4]-q[3])*(u-0.75)/0.25]
+#     )
+    return get_flour_consumption_from_propensity(location, np.random.uniform(0,1,size=sample_size))
 
 def get_flour_consumption_from_propensity(location, propensity):
     """Get distribution of daily flour consumption (in Ethiopia) based on the specified propensity array.
@@ -52,18 +87,6 @@ def get_flour_consumption_from_propensity(location, propensity):
         [u<0.25, u<0.5, u<0.75, u<1],
         [q[1]*u/0.25, q[1]+(q[2]-q[1])*(u-0.25)/0.25, q[2]+(q[3]-q[2])*(u-0.5)/0.25, q[3]+(q[4]-q[3])*(u-0.75)/0.25]
     )
-
-def create_bw_dose_response_distribution():
-    """Define normal distribution representing parameter uncertainty of dose-response on birthweight.
-    mean = 15.1 g per 10 mg daily iron, 95% CI = (6.0,24.2).
-    Effect size comes from Haider et al. (2013)
-    """
-    # mean and 0.975-quantile of normal distribution for mean difference (MD)
-    mean = 15.1 # g per 10 mg daily iron
-    q_975 = 24.2 # 97.5th percentile
-    std = prob_utils.normal_stdev_from_mean_quantile(mean, q_975, 0.975)
-    # Frozen normal distribution for MD, representing uncertainty in our effect size
-    return stats.norm(mean, std)
 
 def calculate_birthweight_shift(dose_response, iron_concentration, daily_flour):
     """
@@ -90,7 +113,14 @@ def get_global_data(draws):
     draws
     dose-response of birthweight for iron (g per additional 10mg iron per day)
     """
-    pass
+    bw_dose_response_distribution = create_bw_dose_response_distribution()
+    birthweight_dose_response = pd.Series(
+        bw_dose_response_distribution.rvs(size=len(draws)),
+        index=draws,
+        name='birthweight_dose_response'
+    )
+    GlobalIronFortificationData = namedtuple('GlobalIronFortificationData', 'draws', 'birthweight_dose_response')
+    return GlobalIronData(draws, birthweight_dose_response)
 
 def get_location_data(location, global_data):
     """
@@ -105,7 +135,35 @@ def get_location_data(location, global_data):
     baseline fortification coverage (proportion of population)
     target fortification coverage (proportion of population)
     """
-    pass
+    iron_concentration = get_iron_concentration(location, global_data.draws)
+    # Same mean daily flour for all draws - no parameter uncertainty in flour consumption distribution
+    mean_daily_flour = sample_flour_consumption(location, 10_000).mean()
+    # Check data dimensions (scalar vs. Series) to make sure multiplication will work
+    mean_birthweight_shift = calculate_birthweight_shift(
+        global_data.birthweight_dose_response, # indexed by draw
+        iron_concentration, # scalar or indexed by draw
+        mean_daily_flour # scalar
+    )
+    # Load flour coverage data
+    # TODO: For now these are scalars, but we can easily add samples from beta distributions indexed by draw
+    flour_coverage_df = get_flour_coverage_df()
+    baseline_coverage = flour_coverage_df.loc[location, ('eats_fortified', 'mean')] / 100
+    intervention_coverage = flour_coverage_df.loc[location, ('eats_fortifiable', 'mean')] / 100
+    LocalIronFortificationData = namedtuple('LocalIronFortificationData',
+                                            'location',
+                                            'iron_concentration', # scalar or indexed by draw
+                                            'mean_daily_flour', # scalar
+                                            'mean_birthweight_shift', # indexed by draw
+                                            'baseline_coverage', # scalar
+                                            'target_coverage', # scalar
+                                           )
+    return LocalIronFortificationData(location,
+                                      iron_concentration,
+                                      mean_daily_flour,
+                                      mean_birthweight_shift,
+                                      baseline_coverage,
+                                      target_coverage,
+                                     )
 
 class IronFortificationIntervention:
     """
@@ -116,20 +174,21 @@ class IronFortificationIntervention:
     def __init__(self, global_data, location_data):
         self.global = global_data
         self.local = location_data
-        # __init__(self, location, baseline_coverage, target_coverage)
-        # TODO: Eliminate the distributions in favor of storing a value for each draw (see below)
-        self.iron_conc_distribution = iron_conc_distributions[location]
-        self.bw_dose_response_distribution = create_bw_dose_response_distribution()
-        # TODO: Change constructor to accept the pre-retrieved data instead of looking it up here
-        # OR: Instead, pass baseline and target coverage into the functions below...
-        self.baseline_coverage = baseline_coverage
-        self.target_coverage = target_coverage
+#         # OLD VERSION, pre-common random numbers:
+#         # __init__(self, location, baseline_coverage, target_coverage)
+#         # TODO: Eliminate the distributions in favor of storing a value for each draw (see below)
+#         self.iron_conc_distribution = iron_conc_distributions[location]
+#         self.bw_dose_response_distribution = create_bw_dose_response_distribution()
+#         # TODO: Change constructor to accept the pre-retrieved data instead of looking it up here
+#         # OR: Instead, pass baseline and target coverage into the functions below...
+#         self.baseline_coverage = baseline_coverage
+#         self.target_coverage = target_coverage
         
-        # Currently these distributions are sampling one value for all draws.
-        # TODO: Update to sample a different value for each draw (need to pass draws to constructor).
-        self.dose_response = self.bw_dose_response_distribution.rvs()
-        self.iron_concentration = self.iron_conc_distribution.rvs()
-    
+#         # Currently these distributions are sampling one value for all draws.
+#         # TODO: Update to sample a different value for each draw (need to pass draws to constructor).
+#         self.dose_response = self.bw_dose_response_distribution.rvs()
+#         self.iron_concentration = self.iron_conc_distribution.rvs()
+
     def assign_propensities(self, pop):
         """
         Assigns propensities to simualants for quantities relevant to this intervention.
@@ -145,7 +204,7 @@ class IronFortificationIntervention:
         # NOTE: We don't necessarily need to sample flour consumption every time if we could
         # compute the mean ahead of time... I need to think more about which data varies by draw vs. population...
         flour_consumption = sample_flour_consumption(10_000)
-        mean_bw_shift = calculate_birthweight_shift(self.dose_response, self.iron_concentration, flour_consumption).mean()
+        mean_bw_shift = calculate_birthweight_shift(self.global.dose_response, self.iron_concentration, flour_consumption).mean()
         # Shift everyone's birthweight down by the average shift
         # TODO: actually, maybe we don't need to store the treatment-deleted category, only the treated categories
         shifted_pop = lbwsg_distribution.apply_birthweight_shift(pop, -baseline_coverage * mean_bw_shift)
