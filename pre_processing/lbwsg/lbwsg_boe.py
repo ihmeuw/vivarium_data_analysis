@@ -87,7 +87,7 @@ class IronBirthweightCalculator:
 
         # Assign propensities to share between scenarios
 #         assign_propensity(self.baseline_pop, IronFortificationIntervention.propensity_name)
-#         self.lbwsg_distribution.assign_propensities(self.baseline_pop) # Not implemented yet
+        self.lbwsg_distribution.assign_propensities(self.baseline_pop)
         self.iron_intervention.assign_propensities(self.baseline_pop)
 
 #         # Assign baseline exposure - ideally this would be done with a propensity to share between scenarios,
