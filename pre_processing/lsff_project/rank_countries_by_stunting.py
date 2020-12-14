@@ -40,10 +40,10 @@ def add_location_ids_to_orig_countries(orig_countries, location_ids):
     # so search for a matching name to get the correct id's and names.
     # (I pre-verified that these searches give exactly one result)
     orig_countries.loc[orig_countries.country=='Tanzania', ['location_id', 'location_name']]=(
-        search_id_table(locids, 'Tanzania').iloc[0,:]
+        search_id_table(locids, 'Tanzania').iloc[0].array # fails without .array, perhaps because df index doesn't match Series name
     )
     orig_countries.loc[orig_countries.country=="Cote d'Ivoire", ['location_id', 'location_name']]=(
-        search_id_table(locids, 'Ivoire').iloc[0,:]
+        search_id_table(locids, 'Ivoire').iloc[0].array # fails without .array, perhaps because df index doesn't match Series name
     )
     # Filter out duplicate country names (e.g. Sudan) by inner joining with correct id's
     location_ids=pd.Series(location_ids, name='location_id')
