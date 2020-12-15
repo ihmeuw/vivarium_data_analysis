@@ -40,12 +40,13 @@ def pull_vad_prevalence_for_locations(location_ids):
     return vad
 
 def pull_vad_daly_burden_for_locations(location_ids):
+    """Pulls all-cause DALYs attributable to vitamin A deficiency for the specified location id's."""
     vad_burden = get_draws(
         gbd_id_type=['rei_id', 'cause_id'], # Types must match gbd_id's
         gbd_id=[list_ids('rei', 'Vitamin A deficiency'), list_ids('cause', 'All causes')],
         source='burdenator',
         measure_id=find_ids('measure', 'DALYs'),
-        metric_id=list_ids('metric', 'Number'), # Rate is not available, only Number and Percent
+        metric_id=list_ids('metric', 'Number'), # Only available metrics are Number and Percent
         location_id=list(location_ids),
         year_id=2019,
         age_group_id=list_ids('age_group',
@@ -57,6 +58,19 @@ def pull_vad_daly_burden_for_locations(location_ids):
     )
     return vad_burden
 
-def calculate_percent_global_VAD_burden():
-    pass
+def aggregate_draws_over_columns(df, groupby_cols):
+    """Aggregates (by summing) over the specified columns in the passed dataframe, draw by draw."""
+    draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns
+    index_cols = df.columns.difference([*draw_cols, *groupby_cols])
+    return df.groupby(index_cols.to_list())[draw_cols.to_list()].sum()
+
+def calculate_proportion_global_vad_burden(vad_burden_for_locations, global_vad_burden):
+    """Calculates percent of the global burden (in DALYs) of vitamin A deficiency for each of the locations
+    in `vad_burden_for_locations`.
+    """
+    groupby_cols = ['age_group_id', 'sex_id']
+    vad_burden_for_locations = aggregate_draws_over_columns(vad_burden_for_locations, groupby_cols)
+    global_vad_burden = aggregate_draws_over_columns(global_vad_burden, groupby_cols)
+    # Reset the location_id level in denominator to broadcast over global instead of trying to match location
+    return vad_burden_for_locations / global_vad_burden.reset_index('location_id', drop=True)
 
