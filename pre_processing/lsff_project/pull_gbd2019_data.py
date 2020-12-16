@@ -7,6 +7,17 @@ import rank_countries_by_stunting as rbs
 from db_queries import get_ids, get_population, get_outputs, get_best_model_versions
 from get_draws.api import get_draws
 
+def get_locations(key):
+    """Reads the location file for the specified description key."""
+    location_files = {
+        'all': 'all_countries_with_ids.csv',
+        'original': 'bgmf_countries_with_ids.csv',
+        'top25': 'bmgf_top_25_countries_20201203.csv',
+    }
+    data_dir = 'data'
+    filepath = f'{data_dir}/{location_files[key]}'
+    return pd.read_csv(filepath)
+
 def find_best_model_versions(search_string, entity='modelable_entity', decomp_step='step4', **kwargs_for_contains):
     """Searches for entity id's with names matching search_string using pandas.Series.str.contains,
     and calls get_best_model_versions with appropriate arguments to determine if decomp_step is correct.
@@ -49,7 +60,7 @@ def pull_vad_daly_burden_for_locations(location_ids):
         metric_id=list_ids('metric', 'Number'), # Only available metrics are Number and Percent
         location_id=list(location_ids),
         year_id=2019,
-        age_group_id=list_ids('age_group',
+        age_group_id=list_ids('age_group', # Actually, burden exists for all age groups because of VAD cause
                              'Early Neonatal', 'Late Neonatal', 'Post Neonatal', '1 to 4'), # Age group aggregates not available
         sex_id=list_ids('sex', 'Male', 'Female'), # Sex aggregates not available
         gbd_round_id=list_ids('gbd_round', '2019'),
@@ -57,6 +68,25 @@ def pull_vad_daly_burden_for_locations(location_ids):
         decomp_step='step5',
     )
     return vad_burden
+
+def pull_dalys_attributable_to_risk_for_locations(risk_factor_name, location_ids):
+    """Calls get_draws to pull all-cause DALYs attributable to the specified risk for the specified locations.
+    The call does not specify the age_group_id, so it will pull DALYs for all age groups that contriibute DALYs.
+    """
+    burden = get_draws(
+        gbd_id_type=['rei_id', 'cause_id'], # Types must match gbd_id's
+        gbd_id=[list_ids('rei', risk_factor_name), list_ids('cause', 'All causes')],
+        source='burdenator',
+        measure_id=find_ids('measure', 'DALYs'),
+        metric_id=list_ids('metric', 'Number'), # Only available metrics are Number and Percent
+        location_id=list(location_ids),
+        year_id=2019,
+        sex_id=list_ids('sex', 'Male', 'Female'), # Sex aggregates not available
+        gbd_round_id=list_ids('gbd_round', '2019'),
+        status='best',
+        decomp_step='step5',
+    )
+    return burden
 
 def aggregate_draws_over_columns(df, groupby_cols):
     """Aggregates (by summing) over the specified columns in the passed dataframe, draw by draw."""
