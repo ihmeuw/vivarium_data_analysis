@@ -13,8 +13,8 @@ def create_bw_dose_response_distribution():
     Effect size comes from Haider et al. (2013)
     """
     # mean and 0.975-quantile of normal distribution for mean difference (MD)
-    mean = 15.1 # g per 10 mg daily iron
-    q_975 = 24.2 # 97.5th percentile
+    mean = 16.7 # g per 10 mg daily iron
+    q_975 = 26.11 # 97.5th percentile
     std = prob_utils.normal_stdev_from_mean_quantile(mean, q_975, 0.975)
     # Frozen normal distribution for MD, representing uncertainty in our effect size
     return stats.norm(mean, std)
