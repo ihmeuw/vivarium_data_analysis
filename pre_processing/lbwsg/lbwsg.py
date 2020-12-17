@@ -59,6 +59,9 @@ def read_lbwsg_data(artifact_path, measure, *filter_terms, draws='all'):
     """
     key = f'risk_factor/low_birth_weight_and_short_gestation/{measure}'
     query_string = ' and '.join(filter_terms)
+    # NOTE: If draws is a numpy array, this line throws a warning:
+    #  "FutureWarning: elementwise comparison failed; returning scalar instead,
+    #   but in the future will perform elementwise comparison"
     if draws=='all':
         draws = range(1000)
     
