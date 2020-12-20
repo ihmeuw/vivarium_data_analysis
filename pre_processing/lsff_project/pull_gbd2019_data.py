@@ -1,4 +1,4 @@
-import pandas as pd
+import pandas as pd, numpy as np
 import sys, os.path
 sys.path.append(os.path.abspath("../.."))
 from pre_processing.id_helper import *
@@ -24,6 +24,9 @@ def get_or_append_global_location(locations=None):
     """
     global_loc = pd.DataFrame({'location_name':'Global', 'location_id':1}, index=[0])
     return global_loc if locations is None else locations.append(global_loc, ignore_index=True)
+
+def split_global_from_other_locations(df):
+    return df.query("location_id !=1"), df.query("location_id==1")
 
 def find_best_model_versions(search_string, entity='modelable_entity', decomp_step='step4', **kwargs_for_contains):
     """Searches for entity id's with names matching search_string using pandas.Series.str.contains,
@@ -115,8 +118,13 @@ def pull_dalys_due_to_cause_for_locations(location_ids, *cause_names):
     )
     return dalys
 
+def add_gbd_entity_name(df, entity):
+    return df.merge(get_ids(f'{entity}')[[f'{entity}_id', get_name_column(entity)]])
+
 def concatenate_risk_and_cause_burdens(risk_burdens, cause_burdens):
+#     risk_burdens = risk_burdens.merge(get_ids('rei')[['rei_id','rei_name']])
     risk_burdens = risk_burdens.drop(columns='cause_id').rename(columns={'rei_id':'gbd_id'})
+#     cause_burdens = cause_burdens.merge(get_ids('cause')[['cause_id','cause_name']])
     cause_burdens = cause_burdens.rename(columns={'cause_id':'gbd_id'})
     risk_burdens['gbd_id_type'] = 'rei'
     cause_burdens['gbd_id_type'] = 'cause'
@@ -186,9 +194,10 @@ def summarize_risk_proportions(risk_burden_proportions):
     risk_burden_proportions.index = ids_to_names('rei', *risk_burden_proportions.index)
     return risk_burden_proportions[['mean_lb_ub', 'mean', 'lower', 'upper']]
 
-def summarize_burden_proportions(burden_proportions):
+def summarize_burden_proportions_across_locations(burden_proportions):
     # Sum proportion over all locations for each risk and cause
-    burden_proportions = burden_proportions.groupby(['gbd_id_type', 'gbd_id']).sum()
+#     burden_proportions = burden_proportions.groupby(['gbd_id_type', 'gbd_id']).sum()
+    burden_proportions = aggregate_draws_over_columns(burden_proportions.reset_index(), ['location_id'])
     burden_proportions['mean'] = burden_proportions.mean(axis=1)
     burden_proportions['lower'] = burden_proportions.quantile(0.025, axis=1)
     burden_proportions['upper'] = burden_proportions.quantile(0.975, axis=1)
@@ -203,7 +212,7 @@ def summarize_burden_proportions(burden_proportions):
     burden_proportions.set_index('gbd_entity_name', append=True, inplace=True)
     return burden_proportions[['mean_lb_ub', 'mean', 'lower', 'upper']]
 
-def get_iron_dalys_by_subpopulation(iron_burden):
+def get_iron_dalys_by_subpopulation1(iron_burden):
 #     wra_age_groups = range(list_ids('age_group', '10 to 14'), list_ids('age_group', '55 to 59'))
 #     under5_age_groups = range(list_ids('age_group', 'Early Neonatal'), list_ids('age_group', '5 to 9'))
 #     male_id = list_ids('sex', 'Male')
@@ -215,7 +224,7 @@ def get_iron_dalys_by_subpopulation(iron_burden):
 #                       f"(sex_id == {male_id} or age_group_id not in {wra_age_groups})"
     
     wra_query = "sex_id==2 and 7 <= age_group_id <= 15" # Female and '10 to 15' to '50 to 54'
-    under5_query = "age_group_id <= 5" # '1 to 4' age group
+    under5_query = "age_group_id <= 5" # id 5 is '1 to 4' age group
     # rest of population = At least 5 years old and (Male or not between ages 10 and 54)
     other_pop_query = "age_group_id > 5 and (sex_id == 1 or age_group_id < 7 or age_group_id > 15)"
     
@@ -234,5 +243,17 @@ def get_iron_dalys_by_subpopulation(iron_burden):
 #     return iron_wra, iron_under5, iron_other
     return {'WRA':totals[0], 'Under 5': totals[1], 'Other': totals[2]}
     
+def get_iron_dalys_by_subpopulation(iron_burden):
+    # Female and '10 to 15' to '50 to 54'
+    wra = (iron_burden.sex_id == 2) & (iron_burden.age_group_id >=7) & (iron_burden.age_group_id <= 15)
+    under5 = iron_burden.age_group_id <=5 # id 5 is '1 to 4' age group
     
+    iron_burden = iron_burden.assign(subpopulation = np.select([wra, under5], ['WRA', 'Under 5'], default='Other'))
+    return aggregate_draws_over_columns(iron_burden, ['age_group_id', 'sex_id'])
+
+def summarize_iron_dalys(iron_dalys_by_subpopulation):
+#     dalys = iron_dalys_by_subpopulation.groupby('subpopulation').sum()
+    dalys = aggregate_draws_over_columns(iron_dalys_by_subpopulation.reset_index(), ['location_id'])
+    return dalys.T.describe()
+
 
