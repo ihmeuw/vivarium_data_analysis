@@ -18,6 +18,13 @@ def get_locations(key):
     filepath = f'{data_dir}/{location_files[key]}'
     return pd.read_csv(filepath)
 
+def get_or_append_global_location(locations=None):
+    """Returns a dataframe with the name and id of the 'Global' location,
+    or appends this data to the passed locations dataframe if not None.
+    """
+    global_loc = pd.DataFrame({'location_name':'Global', 'location_id':1}, index=[0])
+    return global_loc if locations is None else locations.append(global_loc, ignore_index=True)
+
 def find_best_model_versions(search_string, entity='modelable_entity', decomp_step='step4', **kwargs_for_contains):
     """Searches for entity id's with names matching search_string using pandas.Series.str.contains,
     and calls get_best_model_versions with appropriate arguments to determine if decomp_step is correct.
@@ -69,14 +76,16 @@ def pull_vad_daly_burden_for_locations(location_ids):
     )
     return vad_burden
 
-def pull_dalys_attributable_to_risk_for_locations(risk_factor_name, location_ids):
+def pull_dalys_attributable_to_risk_for_locations(location_ids, *risk_factor_names):
     """Calls get_draws to pull all-cause DALYs attributable to the specified risk for the specified locations.
     The call does not specify the age_group_id, so it will pull DALYs for all age groups that contriibute DALYs.
     Estimates from age group aggregates are not available from the burdenator.
     """
+    risk_ids = list_ids('rei', *risk_factor_names)
+    if isinstance(risk_ids, int): risk_ids = [risk_ids]
     burden = get_draws(
-        gbd_id_type=['rei_id', 'cause_id'], # Types must match gbd_id's
-        gbd_id=[list_ids('rei', risk_factor_name), list_ids('cause', 'All causes')],
+        gbd_id_type=['rei_id']*len(risk_ids) + ['cause_id'], # Types must match gbd_id's
+        gbd_id=[*risk_ids, list_ids('cause', 'All causes')],
         source='burdenator',
         measure_id=find_ids('measure', 'DALYs'),
         metric_id=list_ids('metric', 'Number'), # Only available metrics are Number and Percent
@@ -89,10 +98,10 @@ def pull_dalys_attributable_to_risk_for_locations(risk_factor_name, location_ids
     )
     return burden
 
-def pull_dalys_for_cause_for_locations(cause_name, location_ids):
+def pull_dalys_due_to_cause_for_locations(location_ids, *cause_names):
     dalys = get_draws(
         gbd_id_type='cause_id',
-        gbd_id=list_ids('cause', cause_name),
+        gbd_id=list_ids('cause', *cause_names),
         source='dalynator',
         measure_id=find_ids('measure', 'DALYs'),
         metric_id=list_ids('metric', 'Number'),
@@ -106,19 +115,26 @@ def pull_dalys_for_cause_for_locations(cause_name, location_ids):
     )
     return dalys
 
-def aggregate_draws_over_columns(df, groupby_cols):
+def concatenate_risk_and_cause_burdens(risk_burdens, cause_burdens):
+    risk_burdens = risk_burdens.drop(columns='cause_id').rename(columns={'rei_id':'gbd_id'})
+    cause_burdens = cause_burdens.rename(columns={'cause_id':'gbd_id'})
+    risk_burdens['gbd_id_type'] = 'rei'
+    cause_burdens['gbd_id_type'] = 'cause'
+    return pd.concat([risk_burdens, cause_burdens], ignore_index=True, copy=False)
+
+def aggregate_draws_over_columns(df, marginalized_cols):
     """Aggregates (by summing) over the specified columns in the passed dataframe, draw by draw."""
-    draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns
-    index_cols = df.columns.difference([*draw_cols, *groupby_cols])
-    return df.groupby(index_cols.to_list())[draw_cols.to_list()].sum()
+    draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
+    index_cols = df.columns.difference([*draw_cols, *marginalized_cols]).to_list()
+    return df.groupby(index_cols)[draw_cols].sum()
 
 def calculate_proportion_global_vad_burden(vad_burden_for_locations, global_vad_burden):
     """Calculates percent of the global burden (in DALYs) of vitamin A deficiency for each of the locations
     in `vad_burden_for_locations`.
     """
-    groupby_cols = ['age_group_id', 'sex_id']
-    vad_burden_for_locations = aggregate_draws_over_columns(vad_burden_for_locations, groupby_cols)
-    global_vad_burden = aggregate_draws_over_columns(global_vad_burden, groupby_cols)
+    marginalized_cols = ['age_group_id', 'sex_id']
+    vad_burden_for_locations = aggregate_draws_over_columns(vad_burden_for_locations, marginalized_cols)
+    global_vad_burden = aggregate_draws_over_columns(global_vad_burden, marginalized_cols)
     # Reset the location_id level in denominator to broadcast over global instead of trying to match location
     return vad_burden_for_locations / global_vad_burden.reset_index('location_id', drop=True)
 
@@ -126,9 +142,9 @@ def calculate_proportion_global_burden(burden_for_locations, global_burden):
     """Calculates percent of the global burden of a risk or cause for each of the locations
     in `burden_for_locations`.
     """
-    groupby_cols = ['age_group_id', 'sex_id']
-    burden_for_locations = aggregate_draws_over_columns(burden_for_locations, groupby_cols)
-    global_burden = aggregate_draws_over_columns(global_burden, groupby_cols)
+    marginalized_cols = ['age_group_id', 'sex_id']
+    burden_for_locations = aggregate_draws_over_columns(burden_for_locations, marginalized_cols)
+    global_burden = aggregate_draws_over_columns(global_burden, marginalized_cols)
     # Reset the location_id level in denominator to broadcast over global instead of trying to match location
     return burden_for_locations / global_burden.reset_index('location_id', drop=True)
 
@@ -136,7 +152,6 @@ def add_global_location(locations):
     locations = locations[['location_name', 'location_id']]
     global_loc = pd.Series(['Global', 1], index=locations.columns)
     return locations.append(global_loc, ignore_index=True)
-    
 
 def calculate_all_proportion_global_burdens(locations_key):
     """Claculate"""
@@ -170,6 +185,23 @@ def summarize_risk_proportions(risk_burden_proportions):
         lambda row: f"{row['mean']:.2%} ({row['lower']:.2%}, {row['upper']:.2%})", axis=1)
     risk_burden_proportions.index = ids_to_names('rei', *risk_burden_proportions.index)
     return risk_burden_proportions[['mean_lb_ub', 'mean', 'lower', 'upper']]
+
+def summarize_burden_proportions(burden_proportions):
+    # Sum proportion over all locations for each risk and cause
+    burden_proportions = burden_proportions.groupby(['gbd_id_type', 'gbd_id']).sum()
+    burden_proportions['mean'] = burden_proportions.mean(axis=1)
+    burden_proportions['lower'] = burden_proportions.quantile(0.025, axis=1)
+    burden_proportions['upper'] = burden_proportions.quantile(0.975, axis=1)
+    burden_proportions['mean_lb_ub'] = burden_proportions.apply(
+        lambda row: f"{row['mean']:.2%} ({row['lower']:.2%}, {row['upper']:.2%})", axis=1)
+    burden_proportions.loc['rei', 'gbd_entity_name'] = list(
+        ids_to_names('rei', *burden_proportions.loc['rei'].index)
+    )
+    burden_proportions.loc['cause', 'gbd_entity_name'] = list(
+        ids_to_names('cause', *burden_proportions.loc['cause'].index)
+    )
+    burden_proportions.set_index('gbd_entity_name', append=True, inplace=True)
+    return burden_proportions[['mean_lb_ub', 'mean', 'lower', 'upper']]
 
 def get_iron_dalys_by_subpopulation(iron_burden):
 #     wra_age_groups = range(list_ids('age_group', '10 to 14'), list_ids('age_group', '55 to 59'))
