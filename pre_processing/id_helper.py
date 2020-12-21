@@ -188,3 +188,37 @@ def find_ids(table_or_entity, pattern, search_col=None, return_all_columns=False
     """
     df = search_id_table(table_or_entity, pattern, search_col=None, return_all_columns=False, **kwargs_for_contains)
     return ids_in(df)
+
+def add_entity_names(df, *entities):
+    """Adds a name column for each specified entity in the dataframe df, by merging on the entity_id column.
+    If no entities are passed, a name column is added for each enttity id column found in the dataframe.
+    Intended to be called on dataframes returned by the shared functions.
+    Returns a new object (does not modify df in place).
+    """
+#     add_year_name = 'year'in entities
+    if len(entities) == 0:
+        entities = df.filter(regex=r'\w+_id$').columns.str.replace('_id', '')
+#         entities = entities.difference(['year']) # Avoid error from trying to merge two year_id columns
+    for entity in entities:
+        if entity != 'year':  # Avoid error from trying to merge two year_id columns
+            df = df.merge(_get_ids(entity)[[f'{entity}_id', get_name_column(entity)]])
+    if 'year'in entities:
+        df = df.assign(year=df['year_id'])
+    return df
+
+def drop_id_columns(df, *entities, keep=False):
+    """If `keep` is False (default), drops the id column for each specified entity in the dataframe df.
+    Drops all id columns if no entities are passed (you should probably only do this if you have added
+    the corresponding entity name for the relevant id columns).
+    If `keep` is set to True, the passed entities are those ids to keep, and all others will be dropped.
+    Intended to be called on dataframes returned by the shared functions.
+    Returns a new object (does not modify df in place).
+    """
+    if len(entities) == 0 or keep:
+        id_colnames = df.filter(regex=r'\w+_id$').columns
+        if len(entities)>0: # entities are those to keep, not drop
+            id_colnames = id_colnames.difference(entities)
+    else:
+        id_colnames = [f'{entity}_id' for entity in entities]
+    return df.drop(columns=id_colnames)
+
