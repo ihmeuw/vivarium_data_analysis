@@ -279,19 +279,31 @@ def summarize_draws_across_locations(df):
     df = aggregate_draws_over_columns(df, ['location_id'])
     return df.T.describe(percentiles=[0.025, 0.975]).T
 
-def format_summarized_data(summary, number_format=''):
+def format_summarized_data(summary, number_format='', multiplier=1):
+    """Format the mean, lower, and upper values from the summarized data."""
     if number_format == 'percent':
         number_format = '.2%'
-    elif number_format == 'number':
+    elif number_format == 'count':
         number_format = ',.0f'
     
-    fstring = f"""f'{{row["mean"]:{number_format}}} ({{row["lower"]:{number_format}}}, {{row["upper"]:{number_format}}})'"""
+    units = f'_per_{multiplier}' if multiplier != 1 else ''
 
-    def print_mean_lower_upper(row):
-        return eval(fstring)
+    def print_number(x):
+#         return eval(f'f"{{x*{multiplier}:{number_format}}}"')
+        return f"{x*multiplier:{number_format}}"
 
     summary = summary.rename(columns={'2.5%':'lower', '97.5%':'upper'})
-    summary = summary[['mean', 'lower', 'upper']]
-    summary['mean_lb_ub'] = summary.apply(print_mean_lower_upper, axis=1)
+    cols = ['mean', 'lower', 'upper']
+    summary = summary[cols]
+    for col in cols:
+        summary[f'{col}{units}_formatted'] = summary[col].apply(print_number)
+    summary['mean_lower_upper'] = summary.apply(
+        lambda row: f"{row[f'mean{units}_formatted']} ({row[f'lower{units}_formatted']}, {row[f'upper{units}_formatted']})",
+        axis=1
+    )
+#     fstring = f"""f'{{row["mean"]:{number_format}}} ({{row["lower"]:{number_format}}}, {{row["upper"]:{number_format}}})'"""
+#     def print_mean_lower_upper(row):
+#         return eval(fstring)
+#     summary['mean_lb_ub'] = summary.apply(print_mean_lower_upper, axis=1)
     return summary
 
