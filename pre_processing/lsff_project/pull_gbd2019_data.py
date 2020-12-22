@@ -162,7 +162,12 @@ def calculate_proportion_global_burden(burden_for_locations, global_burden):
     burden_for_locations = aggregate_draws_over_columns(burden_for_locations, marginalized_cols)
     global_burden = aggregate_draws_over_columns(global_burden, marginalized_cols)
     # Reset the location_id level in denominator to broadcast over global instead of trying to match location
-    return burden_for_locations / global_burden.reset_index('location_id', drop=True)
+    proportion = burden_for_locations / global_burden.reset_index('location_id', drop=True)
+    # I thought it was confusing to have 'Number' as the metric for a proportion, but on the other hand,
+    # leaving the metric_id alone tells what data was used in the computation
+#     if 'metric_id' in proportion.index.names:
+#         proportion.index.set_levels([list_ids('metric', 'Rate')], level='metric_id', inplace=True)
+    return proportion
 
 # def add_global_location(locations):
 #     locations = locations[['location_name', 'location_id']]
@@ -255,8 +260,11 @@ def get_iron_dalys_by_subpopulation(iron_burden):
     # Female and '10 to 15' to '50 to 54'
     wra = (iron_burden.sex_id == 2) & (iron_burden.age_group_id >=7) & (iron_burden.age_group_id <= 15)
     under5 = iron_burden.age_group_id <=5 # id 5 is '1 to 4' age group
+    five_to_nine = iron_burden.age_group_id == 6 # id 6 is '5 to 9' age group
     
-    iron_burden = iron_burden.assign(subpopulation = np.select([wra, under5], ['WRA', 'Under 5'], default='Other'))
+#     iron_burden = iron_burden.assign(subpopulation = np.select([wra, under5], ['WRA', 'Under 5'], default='Other'))
+    iron_burden = iron_burden.assign(subpopulation = np.select(
+        [wra, under5, five_to_nine], ['WRA', 'Under 5', '5 to 9'], default='Other'))
     return aggregate_draws_over_columns(iron_burden, ['age_group_id', 'sex_id'])
 
 def summarize_iron_dalys(iron_dalys_by_subpopulation):
@@ -264,4 +272,26 @@ def summarize_iron_dalys(iron_dalys_by_subpopulation):
     dalys = aggregate_draws_over_columns(iron_dalys_by_subpopulation.reset_index(), ['location_id'])
     return dalys.T.describe(percentiles=[0.025, 0.975]).T
 
+def summarize_draws_across_locations(df):
+    """Aggregates draws over locations in df, then calls .describe() to compute statistics for all draws.
+    The dataframe df is assumed to have all relevant data stored in columns, not in its index.
+    """
+    df = aggregate_draws_over_columns(df, ['location_id'])
+    return df.T.describe(percentiles=[0.025, 0.975]).T
+
+def format_summarized_data(summary, number_format=''):
+    if number_format == 'percent':
+        number_format = '.2%'
+    elif number_format == 'number':
+        number_format = ',.0f'
+    
+    fstring = f"""f'{{row["mean"]:{number_format}}} ({{row["lower"]:{number_format}}}, {{row["upper"]:{number_format}}})'"""
+
+    def print_mean_lower_upper(row):
+        return eval(fstring)
+
+    summary = summary.rename(columns={'2.5%':'lower', '97.5%':'upper'})
+    summary = summary[['mean', 'lower', 'upper']]
+    summary['mean_lb_ub'] = summary.apply(print_mean_lower_upper, axis=1)
+    return summary
 
