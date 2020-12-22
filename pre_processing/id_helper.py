@@ -215,7 +215,7 @@ def add_entity_names(df, *entities):
             df = df.merge(_get_ids(entity)[[f'{entity}_id', get_name_column(entity)]])
     return df
 
-def drop_id_columns(df, *entities, keep=False):
+def drop_id_columns(df, *entities, keep=False, errors='raise'):
     """If `keep` is False (default), drops the id column for each specified entity in the dataframe df.
     Drops all id columns if no entities are passed (you should probably only do this if you have added
     the corresponding entity name for the relevant id columns).
@@ -223,11 +223,19 @@ def drop_id_columns(df, *entities, keep=False):
     Intended to be called on dataframes returned by the shared functions.
     Returns a new object (does not modify df in place).
     """
+    id_colnames = [f'{entity}_id' for entity in entities]
     if len(entities) == 0 or keep:
-        id_colnames = df.filter(regex=r'\w+_id$').columns # If no entities passed, drop all id columns
+        all_id_colnames = df.filter(regex=r'\w+_id$').columns # If no entities passed, drop all id columns
         if len(entities) > 0: # entities are those to keep, not drop
-            id_colnames = id_colnames.difference(entities)
-    else:
-        id_colnames = [f'{entity}_id' for entity in entities]
-    return df.drop(columns=id_colnames)
+            id_colnames = all_id_colnames.difference(id_colnames)
+            print(id_colnames)
+    return df.drop(columns=id_colnames, errors=errors)
+
+def replace_ids_with_names(df, *entities, invert=False, errors='raise'):
+    """Replaces entity id columns in df with corresponding entity name columns."""
+    if invert:
+        entities = df.filter(regex=r'\w+_id$').columns.difference([f'{entity}_id' for entity in entities])
+    df = add_entity_names(df, *entities)
+    df = drop_id_columns(df, *entities, errors=errors)
+    return df
 
