@@ -136,7 +136,9 @@ def concatenate_risk_and_cause_burdens(risk_burdens, cause_burdens):
         columns={'cause_id':'gbd_id',  'cause_name': 'gbd_entity_name'})
     risk_burdens['gbd_id_type'] = 'rei'
     cause_burdens['gbd_id_type'] = 'cause'
-    return pd.concat([risk_burdens, cause_burdens], ignore_index=True, copy=False)
+    all_data = pd.concat([risk_burdens, cause_burdens], ignore_index=True, copy=False)
+    all_data = replace_ids_with_names(all_data, 'measure', 'metric')
+    return all_data
 
 def aggregate_draws_over_columns(df, marginalized_cols):
     """Aggregates (by summing) over the specified columns in the passed dataframe, draw by draw."""
@@ -255,7 +257,15 @@ def get_iron_dalys_by_subpopulation1(iron_burden):
     
 #     return iron_wra, iron_under5, iron_other
     return {'WRA':totals[0], 'Under 5': totals[1], 'Other': totals[2]}
-    
+
+def get_iron_data(risk_burdens):
+    """Selects and formats the iron deficiency data from the risk_burdens dataframe."""
+    iron_deficiency_id = list_ids('rei', 'Iron deficiency')
+    iron_burden = risk_burdens.query('rei_id == @iron_deficiency_id')
+    iron_burden = add_entity_names(iron_burden)
+    iron_burden = drop_id_columns(iron_burden, 'rei', 'location', keep=True) # Drop all id columns except rei and location
+    return iron_burden
+
 def get_iron_dalys_by_subpopulation(iron_burden):
     # Female and '10 to 15' to '50 to 54'
     wra = (iron_burden.sex_id == 2) & (iron_burden.age_group_id >=7) & (iron_burden.age_group_id <= 15)
