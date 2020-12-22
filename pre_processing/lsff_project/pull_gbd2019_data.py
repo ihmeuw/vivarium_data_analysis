@@ -1,5 +1,6 @@
 import pandas as pd, numpy as np
 import sys, os.path
+from collections import namedtuple
 sys.path.append(os.path.abspath("../.."))
 from pre_processing.id_helper import *
 import rank_countries_by_stunting as rbs
@@ -26,7 +27,12 @@ def get_or_append_global_location(locations=None):
     return global_loc if locations is None else locations.append(global_loc, ignore_index=True)
 
 def split_global_from_other_locations(df):
-    return df.query("location_id !=1"), df.query("location_id==1")
+    """Splits df into two subdataframes and returns the pair of dataframes:
+    The first is where df.location_id is NOT the 'Global' id (1);
+    The second is where df.location_id IS the 'Global' id (1).
+    """
+    SubDataFramesByLocation = namedtuple('SubDataFramesByLocation', 'other_locations, global_location')
+    return SubDataFramesByLocation(df.query("location_id !=1"), df.query("location_id==1"))
 
 def find_best_model_versions(search_string, entity='modelable_entity', decomp_step='step4', **kwargs_for_contains):
     """Searches for entity id's with names matching search_string using pandas.Series.str.contains,
@@ -118,14 +124,16 @@ def pull_dalys_due_to_cause_for_locations(location_ids, *cause_names):
     )
     return dalys
 
-def add_gbd_entity_name(df, entity):
-    return df.merge(get_ids(f'{entity}')[[f'{entity}_id', get_name_column(entity)]])
-
 def concatenate_risk_and_cause_burdens(risk_burdens, cause_burdens):
-#     risk_burdens = risk_burdens.merge(get_ids('rei')[['rei_id','rei_name']])
-    risk_burdens = risk_burdens.drop(columns='cause_id').rename(columns={'rei_id':'gbd_id'})
-#     cause_burdens = cause_burdens.merge(get_ids('cause')[['cause_id','cause_name']])
-    cause_burdens = cause_burdens.rename(columns={'cause_id':'gbd_id'})
+    """Concatenates the risk and cause DALY dataframes returned by get_draws,
+    adding a name column for the risk or cause, and dos some renaming and dropping of unncessary columns. 
+    """
+    risk_burdens = add_entity_names(risk_burdens, 'rei')
+    risk_burdens = risk_burdens.drop(columns='cause_id').rename(
+        columns={'rei_id':'gbd_id', 'rei_name': 'gbd_entity_name'})
+    cause_burdens = add_entity_names(cause_burdens, 'cause')
+    cause_burdens = cause_burdens.rename(
+        columns={'cause_id':'gbd_id',  'cause_name': 'gbd_entity_name'})
     risk_burdens['gbd_id_type'] = 'rei'
     cause_burdens['gbd_id_type'] = 'cause'
     return pd.concat([risk_burdens, cause_burdens], ignore_index=True, copy=False)
@@ -156,32 +164,32 @@ def calculate_proportion_global_burden(burden_for_locations, global_burden):
     # Reset the location_id level in denominator to broadcast over global instead of trying to match location
     return burden_for_locations / global_burden.reset_index('location_id', drop=True)
 
-def add_global_location(locations):
-    locations = locations[['location_name', 'location_id']]
-    global_loc = pd.Series(['Global', 1], index=locations.columns)
-    return locations.append(global_loc, ignore_index=True)
-
-def calculate_all_proportion_global_burdens(locations_key):
-    """Claculate"""
-    locations = get_locations(locations_key)[['location_name', 'location_id']]
+# def add_global_location(locations):
+#     locations = locations[['location_name', 'location_id']]
 #     global_loc = pd.Series(['Global', 1], index=locations.columns)
-#     locations = locations.append(global_loc, ignore_index=True)
-    locations = add_global_location(locations)
-    
-    risks = ['Vitamin A deficiency', 'Zinc deficiency', 'Iron deficiency']
-    risk_burdens = [pull_dalys_attributable_to_risk_for_locations(risk, locations.location_id) for risk in risks]
-#     vad_burden = pull_dalys_attributable_to_risk_for_locations('Vitamin A deficiency', locations.location_id)
-#     zinc_burden = pull_dalys_attributable_to_risk_for_locations('Zinc deficiency', locations.location_id)
-#     iron_burden = pull_dalys_attributable_to_risk_for_locations('Iron deficiency', locations.location_id)
+#     return locations.append(global_loc, ignore_index=True)
 
-    risk_burden_proportions = [
-        calculate_proportion_global_burden(
-            risk_burden.query(f"location_id != {global_loc.location_id}"),
-            risk_burden.query(f"location_id == {global_loc.location_id}")
-        ) for risk_burden in risk_burdens
-    ]
+# def calculate_all_proportion_global_burdens(locations_key):
+#     """Claculate"""
+#     locations = get_locations(locations_key)[['location_name', 'location_id']]
+# #     global_loc = pd.Series(['Global', 1], index=locations.columns)
+# #     locations = locations.append(global_loc, ignore_index=True)
+#     locations = add_global_location(locations)
     
-    return pd.concat(risk_burden_proportions) # return pd.concat of this?
+#     risks = ['Vitamin A deficiency', 'Zinc deficiency', 'Iron deficiency']
+#     risk_burdens = [pull_dalys_attributable_to_risk_for_locations(risk, locations.location_id) for risk in risks]
+# #     vad_burden = pull_dalys_attributable_to_risk_for_locations('Vitamin A deficiency', locations.location_id)
+# #     zinc_burden = pull_dalys_attributable_to_risk_for_locations('Zinc deficiency', locations.location_id)
+# #     iron_burden = pull_dalys_attributable_to_risk_for_locations('Iron deficiency', locations.location_id)
+
+#     risk_burden_proportions = [
+#         calculate_proportion_global_burden(
+#             risk_burden.query(f"location_id != {global_loc.location_id}"),
+#             risk_burden.query(f"location_id == {global_loc.location_id}")
+#         ) for risk_burden in risk_burdens
+#     ]
+    
+#     return pd.concat(risk_burden_proportions) # return pd.concat of this?
 
 def summarize_risk_proportions(risk_burden_proportions):
     # Sum proportion over all locations for each risk
@@ -203,13 +211,13 @@ def summarize_burden_proportions_across_locations(burden_proportions):
     burden_proportions['upper'] = burden_proportions.quantile(0.975, axis=1)
     burden_proportions['mean_lb_ub'] = burden_proportions.apply(
         lambda row: f"{row['mean']:.2%} ({row['lower']:.2%}, {row['upper']:.2%})", axis=1)
-    burden_proportions.loc['rei', 'gbd_entity_name'] = list(
-        ids_to_names('rei', *burden_proportions.loc['rei'].index)
-    )
-    burden_proportions.loc['cause', 'gbd_entity_name'] = list(
-        ids_to_names('cause', *burden_proportions.loc['cause'].index)
-    )
-    burden_proportions.set_index('gbd_entity_name', append=True, inplace=True)
+#     burden_proportions.loc['rei', 'gbd_entity_name'] = list(
+#         ids_to_names('rei', *burden_proportions.loc['rei'].index)
+#     )
+#     burden_proportions.loc['cause', 'gbd_entity_name'] = list(
+#         ids_to_names('cause', *burden_proportions.loc['cause'].index)
+#     )
+#     burden_proportions.set_index('gbd_entity_name', append=True, inplace=True)
     return burden_proportions[['mean_lb_ub', 'mean', 'lower', 'upper']]
 
 def get_iron_dalys_by_subpopulation1(iron_burden):
@@ -254,6 +262,6 @@ def get_iron_dalys_by_subpopulation(iron_burden):
 def summarize_iron_dalys(iron_dalys_by_subpopulation):
 #     dalys = iron_dalys_by_subpopulation.groupby('subpopulation').sum()
     dalys = aggregate_draws_over_columns(iron_dalys_by_subpopulation.reset_index(), ['location_id'])
-    return dalys.T.describe()
+    return dalys.T.describe(percentiles=[0.025, 0.975]).T
 
 
