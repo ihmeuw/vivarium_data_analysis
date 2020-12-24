@@ -262,19 +262,27 @@ def get_iron_data(risk_burdens):
     """Selects and formats the iron deficiency data from the risk_burdens dataframe."""
     iron_deficiency_id = list_ids('rei', 'Iron deficiency')
     iron_burden = risk_burdens.query('rei_id == @iron_deficiency_id')
-    iron_burden = add_entity_names(iron_burden)
-    iron_burden = drop_id_columns(iron_burden, 'rei', 'location', keep=True) # Drop all id columns except rei and location
+    iron_burden = add_entity_names(iron_burden, 'rei')
+    iron_burden = replace_ids_with_names(iron_burden, 'measure', 'metric')
+#     iron_burden = drop_id_columns(iron_burden, 'rei', 'location', keep=True) # Drop all id columns except rei and location
     return iron_burden
 
 def get_iron_dalys_by_subpopulation(iron_burden):
-    # Female and '10 to 15' to '50 to 54'
-    wra = (iron_burden.sex_id == 2) & (iron_burden.age_group_id >=7) & (iron_burden.age_group_id <= 15)
-    under5 = iron_burden.age_group_id <=5 # id 5 is '1 to 4' age group
-    five_to_nine = iron_burden.age_group_id == 6 # id 6 is '5 to 9' age group
+    pops_to_masks = {
+        # Female and '10 to 14' to '50 to 54'
+#         'WRA (10-54)': (iron_burden.sex_id==2) & (iron_burden.age_group_id>=7) & (iron_burden.age_group_id<=15),
+        'Females 15-54': (iron_burden.sex_id==2) & (iron_burden.age_group_id>=8) & (iron_burden.age_group_id<=15),
+        'Under 5': iron_burden.age_group_id<=5, # id 5 is '1 to 4' age group
+        '5-9': iron_burden.age_group_id==6, # id 6 is '5 to 9' age group
+        'Males 10-14': (iron_burden.sex_id==1) & (iron_burden.age_group_id==7),
+        'Females 10-14': (iron_burden.sex_id==2) & (iron_burden.age_group_id==7),
+    }
     
 #     iron_burden = iron_burden.assign(subpopulation = np.select([wra, under5], ['WRA', 'Under 5'], default='Other'))
+#     iron_burden = iron_burden.assign(subpopulation = np.select(
+#         [wra, under5, five_to_nine], ['WRA', 'Under 5', '5 to 9'], default='Other'))
     iron_burden = iron_burden.assign(subpopulation = np.select(
-        [wra, under5, five_to_nine], ['WRA', 'Under 5', '5 to 9'], default='Other'))
+        list(pops_to_masks.values()), list(pops_to_masks.keys()), default='Other'))
     return aggregate_draws_over_columns(iron_burden, ['age_group_id', 'sex_id'])
 
 def summarize_iron_dalys(iron_dalys_by_subpopulation):
