@@ -228,7 +228,6 @@ def drop_id_columns(df, *entities, keep=False, errors='raise'):
         all_id_colnames = df.filter(regex=r'\w+_id$').columns # If no entities passed, drop all id columns
         if len(entities) > 0: # entities are those to keep, not drop
             id_colnames = all_id_colnames.difference(id_colnames)
-            print(id_colnames)
     return df.drop(columns=id_colnames, errors=errors)
 
 def replace_ids_with_names(df, *entities, invert=False, errors='raise'):
