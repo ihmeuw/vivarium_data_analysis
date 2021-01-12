@@ -1,6 +1,8 @@
 import pandas as pd, numpy as np
 import sys, os.path
+# from pandas.api.types import CategoricalDtype
 from collections import namedtuple
+
 sys.path.append(os.path.abspath("../.."))
 from pre_processing.id_helper import *
 import rank_countries_by_stunting as rbs
@@ -143,7 +145,7 @@ def aggregate_draws_over_columns(df, marginalized_cols):
     """Aggregates (by summing) over the specified columns in the passed dataframe, draw by draw."""
     draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
     index_cols = df.columns.difference([*draw_cols, *marginalized_cols]).to_list()
-    return df.groupby(index_cols)[draw_cols].sum()
+    return df.groupby(index_cols, observed=True)[draw_cols].sum() # observed=True needed for Categorical data
 
 def calculate_proportion_global_vad_burden(vad_burden_for_locations, global_vad_burden):
     """Calculates percent of the global burden (in DALYs) of vitamin A deficiency for each of the locations
@@ -266,10 +268,12 @@ def get_iron_data(risk_burdens):
 #     iron_burden = drop_id_columns(iron_burden, 'rei', 'location', keep=True) # Drop all id columns except rei and location
     return iron_burden
 
-def get_iron_dalys_by_subpopulation(iron_burden):
+def get_iron_dalys_by_subpopulation(iron_burden, subpopulations='under5_wra'):
+    """
+    """
     pops_to_masks = {
         # Female and '10 to 14' to '50 to 54'
-#         'WRA (10-54)': (iron_burden.sex_id==2) & (iron_burden.age_group_id>=7) & (iron_burden.age_group_id<=15),
+        'WRA (10-54)': (iron_burden.sex_id==2) & (iron_burden.age_group_id>=7) & (iron_burden.age_group_id<=15),
         'Females 15-54': (iron_burden.sex_id==2) & (iron_burden.age_group_id>=8) & (iron_burden.age_group_id<=15),
         'Under 5': iron_burden.age_group_id<=5, # id 5 is '1 to 4' age group
         '5-9': iron_burden.age_group_id==6, # id 6 is '5 to 9' age group
@@ -277,11 +281,31 @@ def get_iron_dalys_by_subpopulation(iron_burden):
         'Females 10-14': (iron_burden.sex_id==2) & (iron_burden.age_group_id==7),
     }
     
+    if subpopulations == 'under5_wra':
+        subpopulations = ['Under 5', 'WRA (10-54)']
+    elif subpopulations == 'under5_5to9_wra':
+        subpopulations = ['Under 5', '5-9', 'WRA (10-54)']
+    elif subpopulations == 'under5_5to9_m10to14_wra':
+        subpopulations = ['Under 5', '5-9', 'Males 10-14', 'WRA (10-54)']
+    elif subpopulations == 'under5_5to9_mf10to14_f15to54':
+        subpopulations = ['Under 5', '5-9', 'Males 10-14', 'Females 10-14', 'Females 15-54']
+
+    pops_to_masks = {pop: mask for pop, mask in pops_to_masks.items() if pop in subpopulations}
+
+    # Check that subpopulations are mutually exclusive
+    masks = list(pops_to_masks.values())
+    assert all((~(m1 & m2)).all() for m1,m2 in zip(masks[:-1], masks[1:]))
+
 #     iron_burden = iron_burden.assign(subpopulation = np.select([wra, under5], ['WRA', 'Under 5'], default='Other'))
 #     iron_burden = iron_burden.assign(subpopulation = np.select(
 #         [wra, under5, five_to_nine], ['WRA', 'Under 5', '5 to 9'], default='Other'))
-    iron_burden = iron_burden.assign(subpopulation = np.select(
-        list(pops_to_masks.values()), list(pops_to_masks.keys()), default='Other'))
+    iron_burden = iron_burden.assign(
+        subpopulation = pd.Categorical(
+            np.select(list(pops_to_masks.values()), list(pops_to_masks.keys()), default='Other'),
+            categories=['Under 5', '5-9', 'Males 10-14', 'Females 10-14', 'Females 15-54', 'WRA (10-54)', 'Other'],
+            ordered=True
+        )
+    )
     return aggregate_draws_over_columns(iron_burden, ['age_group_id', 'sex_id'])
 
 def summarize_iron_dalys(iron_dalys_by_subpopulation):
@@ -367,17 +391,17 @@ def summarize_iron_burden_by_subpopulation(risk_dalys=None):
     """Summarizes DALY burden due to Iron Deficiency by subpopulation for the specified locations,
     and calculates the proportion of global DALY burden by subpopulation.
     """
-    iron_id = list_ids('rei', 'Iron deficiency')
+#     iron_id = list_ids('rei', 'Iron deficiency')
 #     iron_dalys = risk_dalys.query("rei_id == @iron_id")
 #     iron_dalys_other, iron_dalys_global = split_global_from_other_locations(iron_dalys)
     iron_dalys_by_subpop = (risk_dalys
-                            .query("rei_id == @iron_id")
-                            .pipe(get_iron_dalys_by_subpopulation)
+                            .pipe(get_iron_data)
+                            .pipe(get_iron_dalys_by_subpopulation, subpopulations='under5_wra')
                             .pipe(split_global_from_other_locations)
                            ) # Result is namedtuple
 
 #     iron_subpop_dalys = split_global_from_other_locations(iron_dalys_by_subpop)
-    proportion_iron_dalys_by_subpop = calculate_proportion_global_burden(
+    proportion_global_iron_dalys_by_subpop = calculate_proportion_global_burden(
         iron_dalys_by_subpop.other_locations.reset_index(),
         iron_dalys_by_subpop.global_location.reset_index()
     )
@@ -394,11 +418,11 @@ def summarize_iron_burden_by_subpopulation(risk_dalys=None):
                                         .pipe(format_summarized_data, number_format='count')
                                        )
 
-    proportion_iron_dalys_by_subpop_summary = (proportion_iron_dalys_by_subpop
+    percent_global_iron_dalys_by_subpop_summary = (proportion_global_iron_dalys_by_subpop
                                                .reset_index()
                                                .pipe(summarize_draws_across_locations)
                                                .pipe(format_summarized_data, number_format='percent')
                                               )
 
-    return iron_subpop_dalys_other_summary, iron_subpop_dalys_global_summary, proportion_iron_dalys_by_subpop_summary
+    return iron_subpop_dalys_other_summary, iron_subpop_dalys_global_summary, percent_global_iron_dalys_by_subpop_summary
 
