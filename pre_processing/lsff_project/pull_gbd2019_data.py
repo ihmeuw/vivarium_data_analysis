@@ -363,3 +363,42 @@ def summarize_percent_global_burdens(risk_dalys=None, cause_dalys=None, location
         burden_summary.to_csv(save_filepath)
     return burden_summary
 
+def summarize_iron_burden_by_subpopulation(risk_dalys=None):
+    """Summarizes DALY burden due to Iron Deficiency by subpopulation for the specified locations,
+    and calculates the proportion of global DALY burden by subpopulation.
+    """
+    iron_id = list_ids('rei', 'Iron deficiency')
+#     iron_dalys = risk_dalys.query("rei_id == @iron_id")
+#     iron_dalys_other, iron_dalys_global = split_global_from_other_locations(iron_dalys)
+    iron_dalys_by_subpop = (risk_dalys
+                            .query("rei_id == @iron_id")
+                            .pipe(get_iron_dalys_by_subpopulation)
+                            .pipe(split_global_from_other_locations)
+                           ) # Result is namedtuple
+
+#     iron_subpop_dalys = split_global_from_other_locations(iron_dalys_by_subpop)
+    proportion_iron_dalys_by_subpop = calculate_proportion_global_burden(
+        iron_dalys_by_subpop.other_locations.reset_index(),
+        iron_dalys_by_subpop.global_location.reset_index()
+    )
+
+    iron_subpop_dalys_other_summary = (iron_dalys_by_subpop.other_locations
+                                        .reset_index()
+                                        .pipe(summarize_draws_across_locations)
+                                        .pipe(format_summarized_data, number_format='count')
+                                       )
+
+    iron_subpop_dalys_global_summary = (iron_dalys_by_subpop.global_location
+                                        .reset_index()
+                                        .pipe(summarize_draws_across_locations)
+                                        .pipe(format_summarized_data, number_format='count')
+                                       )
+
+    proportion_iron_dalys_by_subpop_summary = (proportion_iron_dalys_by_subpop
+                                               .reset_index()
+                                               .pipe(summarize_draws_across_locations)
+                                               .pipe(format_summarized_data, number_format='percent')
+                                              )
+
+    return iron_subpop_dalys_other_summary, iron_subpop_dalys_global_summary, proportion_iron_dalys_by_subpop_summary
+
