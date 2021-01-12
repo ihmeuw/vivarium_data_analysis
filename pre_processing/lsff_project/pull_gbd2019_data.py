@@ -8,15 +8,14 @@ import rank_countries_by_stunting as rbs
 from db_queries import get_ids, get_population, get_outputs, get_best_model_versions
 from get_draws.api import get_draws
 
-def get_locations(key):
+def get_locations(key, data_directory='data'):
     """Reads the location file for the specified description key."""
     location_files = {
         'all': 'all_countries_with_ids.csv',
         'original': 'bgmf_countries_with_ids.csv',
         'top25': 'bmgf_top_25_countries_20201203.csv',
     }
-    data_dir = 'data'
-    filepath = f'{data_dir}/{location_files[key]}'
+    filepath = f'{data_directory}/{location_files[key]}'
     return pd.read_csv(filepath)
 
 def get_or_append_global_location(locations=None):
@@ -324,4 +323,43 @@ def format_summarized_data(summary, number_format='', multiplier=1):
 #         return eval(fstring)
 #     summary['mean_lb_ub'] = summary.apply(print_mean_lower_upper, axis=1)
     return summary
+
+def summarize_percent_global_burdens(risk_dalys=None, cause_dalys=None, location_key=None, save_filepath=None):
+    """Returns a dataframe summarizing the percent global burdens of risks and causes, optionally saving the file.
+    If either risk_dalys or cause_dalys is None, then location_key must not be none.
+    """
+    if location_key is not None:
+        locations = get_locations(location_key)
+        locations = get_or_append_global_location(locations)
+
+    if risk_dalys is None:
+        risks = ['Vitamin A deficiency', 'Zinc deficiency', 'Iron deficiency']
+        risk_dalys = pull_dalys_attributable_to_risk_for_locations(locations.location_id, *risks)
+    elif location_key is not None:
+        risk_dalys = risk_dalys.loc[risk_dalys.location_id.isin(locations.location_id)]
+
+    if cause_dalys is None:
+        cause_dalys = pull_dalys_due_to_cause_for_locations(locations.location_id, 'Neural tube defects')
+    elif location_key is not None:
+        cause_dalys = cause_dalys.loc[cause_dalys.location_id.isin(locations.location_id)]
+
+    all_dalys = concatenate_risk_and_cause_burdens(risk_dalys, cause_dalys)
+#     burden_for_locations, global_burden = split_global_from_other_locations(all_dalys)
+#     proportion_global_burden = calculate_proportion_global_burden(burden_for_locations, global_burden)
+
+#     burden_summary = summarize_draws_across_locations(proportion_global_burden.reset_index())
+#     burden_summary = format_summarized_data(burden_summary, number_format='percent')
+#     burden_summary = burden_summary.sort_values(['gbd_id_type', 'gbd_id'], ascending=[False, True])
+    proportion_global_burden = calculate_proportion_global_burden(
+        *split_global_from_other_locations(all_dalys)
+    )
+    burden_summary = (proportion_global_burden
+                      .reset_index()
+                      .pipe(summarize_draws_across_locations)
+                      .pipe(format_summarized_data, number_format='percent')
+                      .sort_values(['gbd_id_type', 'gbd_id'], ascending=[False, True])
+                     )
+    if save_filepath is not None:
+        burden_summary.to_csv(save_filepath)
+    return burden_summary
 
