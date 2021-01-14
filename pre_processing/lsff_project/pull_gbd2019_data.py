@@ -300,3 +300,63 @@ def summarize_iron_burden_by_subpopulation(risk_dalys=None, location_ids=None, s
 
     return iron_subpop_dalys_other_summary, iron_subpop_dalys_global_summary, percent_global_iron_dalys_by_subpop_summary
 
+def pull_under_5_vad_prevalence_for_locations(location_ids):
+    """Calls `get_draws()` to pull vitamin A deficiency prevalence for the 'Under 5' age group
+    for the location id's in the locations_ids iterable.
+    Note that prevalence data exists for all age groups, but the VAD risk only applies to Under 5.
+    Returned dataframe is 2 rows per location (one for each exposure category).
+    """
+    vad_prev = get_draws(
+        'rei_id',
+        gbd_id=list_ids('rei', 'Vitamin A deficiency'),
+        source='exposure',
+        location_id=list(location_ids),
+        year_id=2019,
+        age_group_id=list_ids('age_group', 'Under 5'),
+        sex_id=list_ids('sex', 'Both'),
+        gbd_round_id=list_ids('gbd_round', '2019'),
+        status='best',
+        decomp_step='step4',
+    )
+    return vad_prev
+
+def pull_zinc_deficiency_prevalence_for_locations(location_ids):
+    """Calls `get_draws()` to pull Zinc deficiency prevalence for the '1 to 4' age group
+    for the location id's in the locations_ids iterable.
+    This is the only age group for which prevalence data exists.
+    Returned dataframe is 2 rows per location (one for each exposure category).
+    """
+    zinc_prev = get_draws(
+        'rei_id',
+        gbd_id=list_ids('rei', 'Zinc deficiency'),
+        source='exposure',
+        location_id=list(location_ids),
+        year_id=2019,
+        age_group_id=list_ids('age_group', '1 to 4'),
+        sex_id=list_ids('sex', 'Both'),
+        gbd_round_id=list_ids('gbd_round', '2019'),
+        status='best',
+        decomp_step='step4',
+    )
+    return zinc_prev
+
+def pull_neural_tube_defects_birth_prevalence_for_locations(location_ids):
+    """Calls `get_draws()` to pull Neural tube defects incidence at birth (i.e. birth prevalence)
+    for the location id's in the locations_ids iterable.
+    'Birth' is the only age group for which incidence data exists.
+    Returned dataframe is 1 row per location.
+    """
+    ntd_birth_prev = get_draws(
+        gbd_id_type='cause_id',
+        gbd_id=list_ids('cause', 'Neural tube defects'),
+        source='como',
+        location_id=list(location_ids),
+        year_id=2019,
+#         age_group_id=list_ids('age_group', 'Birth'), # Passing Birth age group throws an error
+        sex_id=list_ids('sex', 'Both'),
+        measure_id=list_ids('measure', 'Incidence'),
+        gbd_round_id=list_ids('gbd_round', '2019'),
+        status='best',
+        decomp_step='step5',
+    )
+    return ntd_birth_prev
