@@ -300,25 +300,64 @@ def summarize_iron_burden_by_subpopulation(risk_dalys=None, location_ids=None, s
 
     return iron_subpop_dalys_other_summary, iron_subpop_dalys_global_summary, percent_global_iron_dalys_by_subpop_summary
 
-def pull_under_5_vad_prevalence_for_locations(location_ids):
+def pull_under_5_vad_data_for_locations(location_ids, hdf_filepath=None):
     """Calls `get_draws()` to pull vitamin A deficiency prevalence for the 'Under 5' age group
     for the location id's in the locations_ids iterable.
-    Note that prevalence data exists for all age groups, but the VAD risk only applies to Under 5.
+    Note that prevalence data exists for all age groups, but the VAD risk only applies to Under 5,
+    specifically ages 6mo - 5years.
+    In particular, VAD relative risks only exist for age groups 4 and 5 ('Post Neonatal' and '1 to 4').
+    The relative difference between the (weighted) average prvalence in age groups 4 and 5 and the 'Under 5'
+    prevalence is less than 1% (prevalence in 4 and 5 is slightly larger, as expected since the population
+    is slightly smaller).
     Returned dataframe is 2 rows per location (one for each exposure category).
     """
-    vad_prev = get_draws(
+    location_ids = list(location_ids)
+    age_group_id = list_ids('age_group', 'Under 5')
+    risk_id = list_ids('rei', 'Vitamin A deficiency')
+    gbd_round_id = list_ids('gbd_round', '2019')
+    
+    # Pulls VAD prevalence for under-5 age group - 2 rows per location (cat1, cat2)
+    vad_prevalence = get_draws(
         'rei_id',
-        gbd_id=list_ids('rei', 'Vitamin A deficiency'),
+        gbd_id=risk_id,
         source='exposure',
-        location_id=list(location_ids),
+        location_id=location_ids,
         year_id=2019,
-        age_group_id=list_ids('age_group', 'Under 5'),
+        age_group_id=age_group_id,
         sex_id=list_ids('sex', 'Both'),
-        gbd_round_id=list_ids('gbd_round', '2019'),
+        gbd_round_id=gbd_round_id,
         status='best',
         decomp_step='step4',
     )
-    return vad_prev
+    
+    # Pulls population for under-5 age group - 1 row per location
+    population = get_population(
+        age_group_id=age_group_id,
+        sex_id=list_ids('sex', 'Both'),
+        location_id=location_ids,
+        year_id=2019,
+        gbd_round_id=gbd_round_id,
+        decomp_step='step4',
+        with_ui=True,
+    )
+    
+    # Pulls all-cause DALY burden for all age groups - 46 rows per location (2 sexes x 23 age groups)
+    vad_dalys = get_draws(
+        gbd_id_type=['rei_id', 'cause_id'], # Types must match gbd_id's
+        gbd_id=[risk_id, list_ids('cause', 'All causes')],
+        source='burdenator',
+        measure_id=find_ids('measure', 'DALYs'),
+#         metric_id=list_ids('metric', 'Number', 'Percent'), # Only available metrics are Number and Percent
+        location_id=list(location_ids),
+        year_id=2019,
+#         sex_id=list_ids('sex', 'Male', 'Female'), # Sex aggregates not available
+        gbd_round_id=gbd_round_id,
+        status='best',
+        decomp_step='step5',
+    )
+
+    VitaminASummaryInputData = namedtuple('VitaminASummaryInputData', 'prevalence, population, dalys')
+    return VitaminASummaryInputData(vad_prevalence, population, vad_dalys)
 
 def pull_zinc_deficiency_prevalence_for_locations(location_ids):
     """Calls `get_draws()` to pull Zinc deficiency prevalence for the '1 to 4' age group
@@ -360,3 +399,48 @@ def pull_neural_tube_defects_birth_prevalence_for_locations(location_ids):
         decomp_step='step5',
     )
     return ntd_birth_prev
+
+INDEX_COLUMNS = ['location_id', 'location_name']
+
+def get_vitamin_a_data_summary(vad_data, location_ids=None):
+    """
+    """
+    prevalence, population, dalys = vad_data
+    
+    if location_ids is None:
+        location_ids = list(population.location_id.unique())
+#         locations = get_ids('location', location_ids)[['location_id', 'location_name']]
+    
+    draw_cols = [f'draw_{i}' for i in range(1000)]
+    index_cols = ['location_id']
+
+    prevalence = (prevalence
+                  .query("parameter == 'cat1'")
+                  .set_index(index_cols)[draw_cols]
+                  .rename_axis(columns='draw')
+                  .stack()
+                  .rename('prevalence_of_vitamin_a_deficiency')
+                 )
+
+    population = population.set_index(index_cols)['population']
+    
+    number_with_vad = (prevalence * population).rename('number_of_children_under_5_with_vad')
+    
+    # Get under-5 age groups
+    under_5_age_groups = names_to_ids('age_group', 'Early Neonatal', 'Late Neonatal', 'Post Neonatal', '1 to 4')
+    
+    dalys = (dalys
+             .query("age_group_id in @under_5_age_groups")
+             .groupby(index_cols)[draw_cols]
+             .sum()
+             .rename_axis(columns='draw')
+             .stack()
+             .rename('dalys_attributable_to_vad_among_children_under_5')
+            )
+    
+    multiplier=100_000
+    daly_rate = (multiplier * dalys / population
+                ).rename(f'dalys_attributable_to_vad_per_{multiplier}_py_among_children_under_5')
+
+    return prevalence, population, number_with_vad, dalys, daly_rate
+    
