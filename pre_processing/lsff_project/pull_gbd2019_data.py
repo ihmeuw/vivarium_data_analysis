@@ -359,6 +359,61 @@ def pull_under_5_vad_data_for_locations(location_ids, hdf_filepath=None):
     VitaminASummaryInputData = namedtuple('VitaminASummaryInputData', 'prevalence, population, dalys')
     return VitaminASummaryInputData(vad_prevalence, population, vad_dalys)
 
+def get_vitamin_a_data_summary(vad_data, location_ids=None):
+    """
+    """
+    prevalence, population, dalys = vad_data
+    
+    if location_ids is None:
+        location_ids = list(population.location_id.unique())
+#         locations = get_ids('location', location_ids)[['location_id', 'location_name']]
+    
+    draw_cols = [f'draw_{i}' for i in range(1000)]
+    index_cols = ['location_id']
+
+    prevalence = (prevalence
+                  .query("parameter == 'cat1'")
+                  .set_index(index_cols)[draw_cols]
+                  .rename_axis(columns='draw')
+                  .stack()
+                  .rename('prevalence_of_vitamin_a_deficiency')
+                 )
+
+    population = population.set_index(index_cols)['population']
+    
+    number_with_vad = (prevalence * population).rename('number_of_children_under_5_with_vad')
+    
+    # Get under-5 age groups
+    under_5_age_groups = list_ids('age_group', 'Early Neonatal', 'Late Neonatal', 'Post Neonatal', '1 to 4')
+    
+    dalys = (dalys
+             .query("age_group_id in @under_5_age_groups")
+             .groupby(index_cols)[draw_cols]
+             .sum()
+             .rename_axis(columns='draw')
+             .stack()
+             .rename('dalys_attributable_to_vad_among_children_under_5')
+            )
+    
+    multiplier=100_000
+    daly_rate = (multiplier * dalys / population
+                ).rename(f'dalys_attributable_to_vad_per_{multiplier}_py_among_children_under_5')
+
+    data_summary = pd.concat([prevalence, number_with_vad, dalys, daly_rate], axis=1)
+    locations = ids_to_names('location', *location_ids)
+#     print(locations)
+    
+    def lower(x): return x.quantile(0.025)
+    def upper(x): return x.quantile(0.075)
+    data_summary = (data_summary
+                    .groupby(index_cols)
+                    .agg(['mean', lower, upper])
+                    .join(locations)
+                    .sort_values('location_name')
+                    .set_index('location_name', append=True)
+                   )
+    return data_summary
+
 def pull_zinc_deficiency_prevalence_for_locations(location_ids):
     """Calls `get_draws()` to pull Zinc deficiency prevalence for the '1 to 4' age group
     for the location id's in the locations_ids iterable.
@@ -402,45 +457,4 @@ def pull_neural_tube_defects_birth_prevalence_for_locations(location_ids):
 
 INDEX_COLUMNS = ['location_id', 'location_name']
 
-def get_vitamin_a_data_summary(vad_data, location_ids=None):
-    """
-    """
-    prevalence, population, dalys = vad_data
-    
-    if location_ids is None:
-        location_ids = list(population.location_id.unique())
-#         locations = get_ids('location', location_ids)[['location_id', 'location_name']]
-    
-    draw_cols = [f'draw_{i}' for i in range(1000)]
-    index_cols = ['location_id']
-
-    prevalence = (prevalence
-                  .query("parameter == 'cat1'")
-                  .set_index(index_cols)[draw_cols]
-                  .rename_axis(columns='draw')
-                  .stack()
-                  .rename('prevalence_of_vitamin_a_deficiency')
-                 )
-
-    population = population.set_index(index_cols)['population']
-    
-    number_with_vad = (prevalence * population).rename('number_of_children_under_5_with_vad')
-    
-    # Get under-5 age groups
-    under_5_age_groups = names_to_ids('age_group', 'Early Neonatal', 'Late Neonatal', 'Post Neonatal', '1 to 4')
-    
-    dalys = (dalys
-             .query("age_group_id in @under_5_age_groups")
-             .groupby(index_cols)[draw_cols]
-             .sum()
-             .rename_axis(columns='draw')
-             .stack()
-             .rename('dalys_attributable_to_vad_among_children_under_5')
-            )
-    
-    multiplier=100_000
-    daly_rate = (multiplier * dalys / population
-                ).rename(f'dalys_attributable_to_vad_per_{multiplier}_py_among_children_under_5')
-
-    return prevalence, population, number_with_vad, dalys, daly_rate
     
