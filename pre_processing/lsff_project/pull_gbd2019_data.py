@@ -329,6 +329,8 @@ def pull_under_5_vad_data_for_locations(location_ids, hdf_filepath=None):
         status='best',
         decomp_step='step4',
     )
+    if hdf_filepath is not None:
+        vad_prevalence.to_hdf(hdf_filepath, 'vitamin_a_deficiency/prevalence_under_5')
     
     # Pulls population for under-5 age group - 1 row per location
     population = get_population(
@@ -340,6 +342,8 @@ def pull_under_5_vad_data_for_locations(location_ids, hdf_filepath=None):
         decomp_step='step4',
         with_ui=True,
     )
+    if hdf_filepath is not None:
+        vad_prevalence.to_hdf(hdf_filepath, 'vitamin_a_deficiency/population_under_5')
     
     # Pulls all-cause DALY burden for all age groups - 46 rows per location (2 sexes x 23 age groups)
     vad_dalys = get_draws(
@@ -355,6 +359,8 @@ def pull_under_5_vad_data_for_locations(location_ids, hdf_filepath=None):
         status='best',
         decomp_step='step5',
     )
+    if hdf_filepath is not None:
+        vad_prevalence.to_hdf(hdf_filepath, 'vitamin_a_deficiency/dalys_attributable')
 
     VitaminASummaryInputData = namedtuple('VitaminASummaryInputData', 'prevalence, population, dalys')
     return VitaminASummaryInputData(vad_prevalence, population, vad_dalys)
@@ -403,16 +409,27 @@ def get_vitamin_a_data_summary(vad_data, location_ids=None):
     locations = ids_to_names('location', *location_ids)
 #     print(locations)
     
-    def lower(x): return x.quantile(0.025)
-    def upper(x): return x.quantile(0.075)
+#     def lower(x): return x.quantile(0.025)
+#     def upper(x): return x.quantile(0.075)
     data_summary = (data_summary
                     .groupby(index_cols)
-                    .agg(['mean', lower, upper])
+                    .pipe(aggregate_mean_lower_upper)
                     .join(locations)
                     .sort_values('location_name')
                     .set_index('location_name', append=True)
+                    .pipe(move_global_to_end)
                    )
     return data_summary
+
+def aggregate_mean_lower_upper(df_or_groupby):
+    """"""
+    def lower(x): return x.quantile(0.025)
+    def upper(x): return x.quantile(0.075)
+    return df_or_groupby.agg(['mean', lower, upper])
+
+def move_global_to_end(df):
+    """"""
+    return pd.concat(split_global_from_other_locations(df))
 
 def pull_zinc_deficiency_prevalence_for_locations(location_ids):
     """Calls `get_draws()` to pull Zinc deficiency prevalence for the '1 to 4' age group
