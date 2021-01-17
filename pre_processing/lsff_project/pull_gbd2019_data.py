@@ -343,7 +343,7 @@ def pull_under_5_vad_data_for_locations(location_ids, hdf_filepath=None):
         with_ui=True,
     )
     if hdf_filepath is not None:
-        vad_prevalence.to_hdf(hdf_filepath, 'vitamin_a_deficiency/population_under_5')
+        population.to_hdf(hdf_filepath, 'vitamin_a_deficiency/population_under_5')
     
     # Pulls all-cause DALY burden for all age groups - 46 rows per location (2 sexes x 23 age groups)
     vad_dalys = get_draws(
@@ -360,7 +360,7 @@ def pull_under_5_vad_data_for_locations(location_ids, hdf_filepath=None):
         decomp_step='step5',
     )
     if hdf_filepath is not None:
-        vad_prevalence.to_hdf(hdf_filepath, 'vitamin_a_deficiency/dalys_attributable')
+        vad_dalys.to_hdf(hdf_filepath, 'vitamin_a_deficiency/dalys_attributable')
 
     VitaminASummaryInputData = namedtuple('VitaminASummaryInputData', 'prevalence, population, dalys')
     return VitaminASummaryInputData(vad_prevalence, population, vad_dalys)
@@ -431,14 +431,14 @@ def move_global_to_end(df):
     """"""
     return pd.concat(split_global_from_other_locations(df))
 
-def pull_zinc_deficiency_prevalence_for_locations(location_ids):
+def pull_zinc_deficiency_prevalence_for_locations(location_ids, hdf_filepath=None):
     """Calls `get_draws()` to pull Zinc deficiency prevalence for the '1 to 4' age group
     for the location id's in the locations_ids iterable.
     This is the only age group for which prevalence data exists.
     Returned dataframe is 2 rows per location (one for each exposure category).
     """
     zinc_prev = get_draws(
-        'rei_id',
+        gbd_id_type='rei_id',
         gbd_id=list_ids('rei', 'Zinc deficiency'),
         source='exposure',
         location_id=list(location_ids),
@@ -451,7 +451,75 @@ def pull_zinc_deficiency_prevalence_for_locations(location_ids):
     )
     return zinc_prev
 
-def pull_neural_tube_defects_birth_prevalence_for_locations(location_ids):
+def pull_binary_risk_summary_input_data_for_locations(location_ids, risk_name, hdf_filepath=None):
+    if risk_name=='Vitamin A deficiency':
+        age_group = 'Under 5'
+    elif risk_name=='Zinc deficiency':
+        age_group='1 to 4'
+    else:
+        raise ValueError(f'Unsupported risk name: {risk_name}')
+    
+    risk_name_formatted = risk_name.lower().replace(' ', '_')
+    age_group_formatted = age_group.lower().replace(' ', '_')
+    
+    location_ids=list(location_ids)
+    risk_id=list_ids('rei', risk_name)
+    age_group_id=list_ids('age_group', age_group)
+    sex_id=list_ids('sex', 'Male', 'Female', 'Both')
+    gbd_round_id=list_ids('gbd_round', '2019')
+    
+    # Pulls prevalence for specified age group - 2 rows per location (cat1, cat2) per sex id
+    prevalence = get_draws(
+        gbd_id_type='rei_id',
+        gbd_id=risk_id,
+        source='exposure',
+        location_id=location_ids,
+        year_id=2019,
+        age_group_id=age_group_id,
+        sex_id=sex_id,
+        gbd_round_id=gbd_round_id,
+        status='best',
+        decomp_step='step4',
+    )
+    if hdf_filepath is not None:
+        prevalence.to_hdf(hdf_filepath, f'{risk_name_formatted}/prevalence_among_{age_group_formatted}')
+    
+    # Pulls population for specified age group - 1 row per location per sex id
+    population = get_population(
+        age_group_id=age_group_id,
+        sex_id=sex_id,
+        location_id=location_ids,
+        year_id=2019,
+        gbd_round_id=gbd_round_id,
+        decomp_step='step4',
+        with_ui=True,
+    )
+    if hdf_filepath is not None:
+        population.to_hdf(hdf_filepath, f'{risk_name_formatted}/population_{age_group_formatted}')
+    
+    # Pulls all-cause DALY burden (number and percent) for all age groups
+    # Vitamin A: 92 rows per location (23 age groups x 2 sexes x 2 metrics)
+    # Zinc: 4 rows per location (1 age group x 2 sexes x 2 metrics)
+    daly_burden = get_draws(
+        gbd_id_type=['rei_id', 'cause_id'], # Types must match gbd_id's
+        gbd_id=[risk_id, list_ids('cause', 'All causes')],
+        source='burdenator',
+        measure_id=find_ids('measure', 'DALYs'),
+        metric_id=None, # Only available metrics are Number and Percent
+        location_id=list(location_ids),
+        year_id=2019,
+        sex_id=None, # Sex aggregates not available
+        gbd_round_id=gbd_round_id,
+        status='best',
+        decomp_step='step5',
+    )
+    if hdf_filepath is not None:
+        daly_burden.to_hdf(hdf_filepath, f'{risk_name_formatted}/daly_burden')
+
+    BinaryRiskSummaryInputData = namedtuple('BinaryRiskSummaryInputData', 'prevalence, population, daly_burden')
+    return BinaryRiskSummaryInputData(prevalence, population, daly_burden)
+
+def pull_neural_tube_defects_birth_prevalence_for_locations(location_ids, hdf_filepath=None):
     """Calls `get_draws()` to pull Neural tube defects incidence at birth (i.e. birth prevalence)
     for the location id's in the locations_ids iterable.
     'Birth' is the only age group for which incidence data exists.
@@ -472,6 +540,3 @@ def pull_neural_tube_defects_birth_prevalence_for_locations(location_ids):
     )
     return ntd_birth_prev
 
-INDEX_COLUMNS = ['location_id', 'location_name']
-
-    
