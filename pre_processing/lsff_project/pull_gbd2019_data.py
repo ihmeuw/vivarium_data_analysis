@@ -424,7 +424,7 @@ def get_vitamin_a_data_summary(vad_data, location_ids=None):
 def aggregate_mean_lower_upper(df_or_groupby):
     """"""
     def lower(x): return x.quantile(0.025)
-    def upper(x): return x.quantile(0.075)
+    def upper(x): return x.quantile(0.975)
     return df_or_groupby.agg(['mean', lower, upper])
 
 def move_global_to_end(df):
@@ -452,6 +452,8 @@ def pull_zinc_deficiency_prevalence_for_locations(location_ids, hdf_filepath=Non
     return zinc_prev
 
 def pull_binary_risk_summary_input_data_for_locations(location_ids, risk_name, hdf_filepath=None):
+    """
+    """
     if risk_name=='Vitamin A deficiency':
         age_group = 'Under 5'
     elif risk_name=='Zinc deficiency':
@@ -516,8 +518,103 @@ def pull_binary_risk_summary_input_data_for_locations(location_ids, risk_name, h
     if hdf_filepath is not None:
         daly_burden.to_hdf(hdf_filepath, f'{risk_name_formatted}/daly_burden')
 
-    BinaryRiskSummaryInputData = namedtuple('BinaryRiskSummaryInputData', 'prevalence, population, daly_burden')
+    BinaryRiskSummaryData = namedtuple('BinaryRiskSummaryInputData', 'prevalence, population, daly_burden')
     return BinaryRiskSummaryInputData(prevalence, population, daly_burden)
+
+def preprocess_zinc_data(zinc_data):
+    """"""
+    sex_ids=list_ids('sex', 'Both')
+    age_group_ids=list_ids('age_group', '1 to 4')
+    number_id=list_ids('metric', 'Number')
+    percent_id=list_ids('metric', 'Percent')
+    prevalence = zinc_data.prevalence.query("sex_id == @sex_ids and parameter == 'cat1'")
+    population = zinc_data.population.query("sex_id == @sex_ids")
+    daly_count = (zinc_data.daly_burden
+                  .query("metric_id == @number_id")
+                  .pipe(aggregate_draws_over_columns, ['sex_id'])
+                  .reset_index()
+                 )
+    daly_percent = (zinc_data.daly_burden
+                    .query("metric_id == @percent_id")
+                    .pipe(aggregate_draws_over_columns, ['sex_id'])
+                    .reset_index()
+                   )
+    BinaryRiskSummaryPreprocessedData = namedtuple(
+        'BinaryRiskSummaryPreprocessedData', 'prevalence, population, daly_count, daly_percent')
+    return BinaryRiskSummaryPreprocessedData(prevalence, population, daly_count, daly_percent)
+
+def get_binary_risk_data_summary(risk_data, location_ids=None):
+    """
+    """
+    prevalence, population, daly_count, daly_percent = risk_data
+    
+    if location_ids is None:
+        location_ids = list(population.location_id.unique())
+#         locations = get_ids('location', location_ids)[['location_id', 'location_name']]
+    
+    draw_cols = [f'draw_{i}' for i in range(1000)]
+    index_cols = ['location_id']
+
+    def create_column(df, colname):
+        column = (df
+                  .set_index(index_cols)[draw_cols]
+                  .rename_axis(columns='draw')
+                  .stack()
+                  .rename(colname)
+                 )
+        return column
+          
+    prevalence = (prevalence
+#                   .query("parameter == 'cat1'")
+                  .set_index(index_cols)[draw_cols]
+                  .rename_axis(columns='draw')
+                  .stack()
+                  .rename('prevalence_of_zinc_deficiency_in_age_group_1_to_4')
+                 )
+
+    population = population.set_index(index_cols)['population']
+    
+    number_with_vad = (prevalence * population).rename('number_in_age_group_1_to_4_with_zinc_deficiency')
+    
+#     # Get under-5 age groups
+#     under_5_age_groups = list_ids('age_group', 'Early Neonatal', 'Late Neonatal', 'Post Neonatal', '1 to 4')
+    
+    daly_count = (daly_count
+#              .query("age_group_id in @under_5_age_groups")
+#              .groupby(index_cols)[draw_cols]
+#              .sum()
+                  .set_index(index_cols)[draw_cols]
+                  .rename_axis(columns='draw')
+                  .stack()
+                  .rename('dalys_attributable_to_zinc_deficiency_in_age_group_1_to_4')
+                 )
+    
+    multiplier=100_000
+    daly_rate = (multiplier * daly_count / population
+                ).rename(f'dalys_attributable_to_zinc_deficiency_per_{multiplier}_py_in_age_group_1_to_4')
+    
+    daly_percent = (daly_percent
+                    .set_index(index_cols)[draw_cols]
+                    .rename_axis(columns='draw')
+                    .stack()
+                    .rename('percent_of_total_dalys_in_age_group_1_to_4_attributable_to_zinc_deficiency')
+                   )
+
+    data_summary = pd.concat([prevalence, number_with_vad, daly_count, daly_rate, daly_percent], axis=1)
+    locations = ids_to_names('location', *location_ids)
+#     print(locations)
+    
+#     def lower(x): return x.quantile(0.025)
+#     def upper(x): return x.quantile(0.075)
+    data_summary = (data_summary
+                    .groupby(index_cols)
+                    .pipe(aggregate_mean_lower_upper)
+                    .join(locations)
+                    .sort_values('location_name')
+                    .set_index('location_name', append=True)
+                    .pipe(move_global_to_end)
+                   )
+    return data_summary
 
 def pull_neural_tube_defects_birth_prevalence_for_locations(location_ids, hdf_filepath=None):
     """Calls `get_draws()` to pull Neural tube defects incidence at birth (i.e. birth prevalence)
