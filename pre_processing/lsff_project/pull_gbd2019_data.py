@@ -836,7 +836,7 @@ def preprocess_neural_tube_defects_data(ntd_data):
     # Filter prevalence to Birth prevalence
     birth_prevalence = prevalence.query("sex_id == @sex_id and age_group_id == @birth_age_group_id")
     birth_population = population.query("sex_id == @sex_id and age_group_id == @birth_age_group_id")
-    # Filter DALYs to Under-5 age group
+    # Filter DALYs to Under-5 age group, and record the age group name
     dalys = (daly_burden
              .query("sex_id == @sex_id and age_group_id == @under_5_age_group_id")
              .assign(age_group='Under 5')
@@ -848,52 +848,54 @@ def preprocess_neural_tube_defects_data(ntd_data):
         'BinaryCauseSummaryPreprocessedData','prevalence, population, daly_count, daly_rate, daly_percent')
     return BinaryCauseSummaryPreprocessedData(birth_prevalence, birth_population, daly_count, daly_rate, daly_percent)
 
-def get_binary_outcome_data_summary(outcome_data, outcome_name, location_ids=None):
+def get_binary_outcome_data_summary(preprocessed_data, outcome_name, location_ids=None, save_filepath=None):
+    """Creates a dataframe summarizing GBD data for the specified binary outcome.
+    Namely, the summary has columns for prevalence, number with outcome, DALYs attributable to outcome,
+    and DALYs attributable to outcome per 100,000 person-years, in appropriate age groups.
+    Currently works for Vitamin A deficiency, Zinc deficiency, and Neural tube defects.
     """
-    """
-    prevalence, population, daly_count, daly_rate, daly_percent = outcome_data
+    prevalence, population, daly_count, daly_rate, daly_percent = preprocessed_data
     
     if location_ids is None:
         location_ids = list(population.location_id.unique())
-#         locations = get_ids('location', location_ids)[['location_id', 'location_name']]
     
     draw_cols = [f'draw_{i}' for i in range(1000)]
     index_cols = ['location_id']
 
     def make_column(df, colname):
+        """Converts the draw data in a dataframe returned by get_draws into a pandas Series
+        indexed by location_id and draw, with the specified name. The data is assumed to
+        contain a unique gbd entity, age group, sex, measure, and metric.
+        """
         column = (df
+                  .query(f"location_id in {location_ids}")
                   .set_index(index_cols)[draw_cols]
                   .rename_axis(columns='draw')
                   .stack()
                   .rename(colname)
                  )
         return column
-          
-#     prevalence = (prevalence
-# #                   .query("parameter == 'cat1'")
-#                   .set_index(index_cols)[draw_cols]
-#                   .rename_axis(columns='draw')
-#                   .stack()
-#                   .rename('prevalence_of_zinc_deficiency_in_age_group_1_to_4')
-#                  )
+
+    # Create prevalence column
     prevalence_age_group = ids_to_names('age_group', *prevalence.age_group_id.unique())
     assert len(prevalence_age_group) == 1
     prevalence = make_column(prevalence, f'Prevalence of {outcome_name} in age group {prevalence_age_group.iloc[0]}')
 
-    population = population.set_index(index_cols)['population']
+    # Re-index the population to match other columns for calculations
+    population = (population
+                  .query("location_id in @location_ids")
+                  .set_index(index_cols)['population']
+                 )
     
+    # Create column for number with the outcome
     number_with_outcome = (prevalence * population).rename(
         f'Number in age group {prevalence_age_group.iloc[0]} with {outcome_name}')
-    
-#     daly_count = (daly_count
-#                   .set_index(index_cols)[draw_cols]
-#                   .rename_axis(columns='draw')
-#                   .stack()
-#                   .rename('dalys_attributable_to_zinc_deficiency_in_age_group_1_to_4')
-#                  )
-    daly_age_group = daly_count.age_group.unique()[0]
+
+    # Create DALY count column
+    daly_age_group = daly_count.age_group.unique()[0] # Age group column was added in preprocessing
     daly_count = make_column(daly_count, f'DALYs attributable to {outcome_name} in age group {daly_age_group}')
     
+    # Create DALY rate column
     daly_multiplier = 100_000
     daly_rate_colname = (f'DALYs attributable to {outcome_name} '
                          f'per {daly_multiplier:,} person-years in age group {daly_age_group}'
@@ -905,6 +907,7 @@ def get_binary_outcome_data_summary(outcome_data, outcome_name, location_ids=Non
         
 #     daly_percent = make_column(daly_percent, 'Percent of total DALYs in age group {daly_age_group} attributable {outcome_name}')
 
+    # Concatenate columns, summarize draws, and add location names
     data_summary = pd.concat([prevalence, number_with_outcome, daly_count, daly_rate], axis=1)
     locations = ids_to_names('location', *location_ids)
 
@@ -918,4 +921,6 @@ def get_binary_outcome_data_summary(outcome_data, outcome_name, location_ids=Non
                     .pipe(move_global_to_end)
                     .pipe(expand_column_levels, names=['measure', 'estimate'])
                    )
+    if save_filepath is not None:
+        data_summary.to_csv(save_filepath)
     return data_summary
