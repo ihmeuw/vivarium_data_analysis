@@ -924,3 +924,34 @@ def get_binary_outcome_data_summary(preprocessed_data, outcome_name, location_id
     if save_filepath is not None:
         data_summary.to_csv(save_filepath)
     return data_summary
+
+def format_data_summary(data_summary, prevalence_multiplier=100):
+    """
+    """
+    idx = pd.IndexSlice
+    def print_mean_lower_upper(row):
+        return f"{row['mean']} ({row['lower']}, {row['upper']})"
+    
+    def print_mean_lower_upper(mean, lower, upper, number_format=''):
+        return f"{mean:{number_format}} ({lower:{number_format}}, {upper:{number_format}})"
+   
+    prevalence = data_summary.filter(regex=r'Prevalence') * prevalence_multiplier
+    
+    cols = []
+    for measure in data_summary.columns.get_level_values('measure').unique():
+        df = data_summary[measure]
+        if measure.startswith('Prevalence'):
+            df *= prevalence_multiplier
+            number_format = '.2f'
+            suffix = f" (per {prevalence_multiplier})"
+        else:
+            number_format = ',.0f'
+            suffix = ''
+        col = (df
+               .apply(lambda row: print_mean_lower_upper(row['mean'], row['lower'], row['upper'], number_format)
+                      , axis=1)
+               .rename(measure + suffix)
+              )
+        cols.append(col)
+        
+    return pd.concat(cols, axis=1)
