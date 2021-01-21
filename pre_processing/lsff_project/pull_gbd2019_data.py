@@ -925,17 +925,11 @@ def get_binary_outcome_data_summary(preprocessed_data, outcome_name, location_id
         data_summary.to_csv(save_filepath)
     return data_summary
 
-def format_data_summary(data_summary, prevalence_multiplier=100):
+def format_data_summary(data_summary, prevalence_multiplier=100, sep=' ', save_filename=None):
     """
     """
-    idx = pd.IndexSlice
-    def print_mean_lower_upper(row):
-        return f"{row['mean']} ({row['lower']}, {row['upper']})"
-    
     def print_mean_lower_upper(mean, lower, upper, number_format=''):
-        return f"{mean:{number_format}} ({lower:{number_format}}, {upper:{number_format}})"
-   
-    prevalence = data_summary.filter(regex=r'Prevalence') * prevalence_multiplier
+        return f"{mean:{number_format}}{sep}({lower:{number_format}}, {upper:{number_format}})"
     
     cols = []
     for measure in data_summary.columns.get_level_values('measure').unique():
@@ -954,4 +948,8 @@ def format_data_summary(data_summary, prevalence_multiplier=100):
               )
         cols.append(col)
         
-    return pd.concat(cols, axis=1)
+    formatted_summary = pd.concat(cols, axis=1)
+    if save_filename is not None:
+        formatted_summary.to_csv(save_filename)
+    return formatted_summary
+
