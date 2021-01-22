@@ -925,7 +925,14 @@ def get_binary_outcome_data_summary(preprocessed_data, outcome_name, location_id
         data_summary.to_csv(save_filepath)
     return data_summary
 
-def format_data_summary(data_summary, prevalence_multiplier=100, sep=' ', save_filename=None):
+def format_data_summary(data_summary,
+                        prevalence_multiplier=100,
+                        prevalence_decimals=1,
+                        prevalent_cases_units=1000,
+                        daly_count_units=1,
+                        daly_count_decimals=0,
+                        sep='\n',
+                        save_filename=None):
     """
     """
     def print_mean_lower_upper(mean, lower, upper, number_format=''):
@@ -936,8 +943,16 @@ def format_data_summary(data_summary, prevalence_multiplier=100, sep=' ', save_f
         df = data_summary[measure]
         if measure.startswith('Prevalence'):
             df *= prevalence_multiplier
-            number_format = '.2f'
+            number_format = f'.{prevalence_decimals}f'
             suffix = f" (per {prevalence_multiplier})"
+        elif measure.startswith('Number'):
+            df /= prevalent_cases_units
+            number_format = ',.0f'
+            suffix = f" ({prevalent_cases_units}s)" if prevalent_cases_units>1 else ''
+        elif measure.startswith('DALYs') and 'person-years' not in measure:
+            df /= daly_count_units
+            number_format = f',.{daly_count_decimals}f'
+            suffix = f" ({daly_count_units}s)" if daly_count_units>1 else ''
         else:
             number_format = ',.0f'
             suffix = ''
