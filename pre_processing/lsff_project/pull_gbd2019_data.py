@@ -931,6 +931,7 @@ def format_data_summary(data_summary,
                         prevalent_cases_units=1000,
                         daly_count_units=1,
                         daly_count_decimals=0,
+                        daly_rate_multiplier=1,
                         sep='\n',
                         save_filename=None):
     """
@@ -949,10 +950,18 @@ def format_data_summary(data_summary,
             df /= prevalent_cases_units
             number_format = ',.0f'
             suffix = f" ({prevalent_cases_units}s)" if prevalent_cases_units>1 else ''
-        elif measure.startswith('DALYs') and 'person-years' not in measure:
-            df /= daly_count_units
-            number_format = f',.{daly_count_decimals}f'
-            suffix = f" ({daly_count_units}s)" if daly_count_units>1 else ''
+        elif measure.startswith('Mean'):
+            number_format = '.1f'
+            suffix = ''
+        elif measure.startswith('DALYs'):
+            if 'person-year' in measure:
+                df *= daly_rate_multiplier
+                number_format = f',.0f'
+                suffix = f" (per {daly_rate_multiplier})" if daly_rate_multiplier !=1 else ''
+            else:
+                df /= daly_count_units
+                number_format = f',.{daly_count_decimals}f'
+                suffix = f" ({daly_count_units}s)" if daly_count_units>1 else ''
         else:
             number_format = ',.0f'
             suffix = ''
