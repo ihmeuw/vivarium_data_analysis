@@ -65,13 +65,13 @@ These were outputted for:
 - neural tube defects (cause)
 
 Script -> output assignment:
-- 2021_01_15_LSFF_GBD_risks_and_causes_model_input_data_density_maps_topcoding
+- 2021_01_15_LSFF_GBD_risks_and_causes_model_input_data_density_maps
     - zinc deficiency (risk)
     - vit a deficiency (risk)
     - iron deficiency (risk)
     - vit a deficiency (cause)
     - iron deficiency (cause)
-- 2021_01_15_LSFF_GBD_risks_and_causes_model_input_data_density_maps
+- 2021_01_15_LSFF_GBD_risks_and_causes_model_input_data_density_maps_topcoding
     - neural tube defects (cause)
         - Plotted in logspace
         - Topcoded China "to the value "above 100,000 rows of data", because the
