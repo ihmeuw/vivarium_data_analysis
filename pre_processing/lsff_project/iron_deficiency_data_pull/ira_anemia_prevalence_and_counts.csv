@@ -1,0 +1,209 @@
+,parameter,measure_id,measure,metric_id,location_id,age_group_id,sex_id,location_name,sex,age,mean,lower,upper
+0,Total iron responsive anemia,3,ylds,rate,1,169,2,Global,Female,Reproductive age,0.006488779446452387,0.004487159150798191,0.009090281098284641
+1,Total iron responsive anemia,5,prevalence,rate,1,169,2,Global,Female,Reproductive age,0.1954898473541218,0.19057286769544424,0.20019883118935503
+2,Total iron responsive anemia,3,ylds,count,1,169,2,Global,Female,Reproductive age,16062536.829897571,11107660.495490184,22502379.089976393
+3,Total iron responsive anemia,5,prevalence,count,1,169,2,Global,Female,Reproductive age,483921960.8108894,471750308.5747286,495578733.38407016
+4,Total iron responsive anemia,3,ylds,rate,6,169,2,China,Female,Reproductive age,0.0019978327494582387,0.0013130381443930668,0.0028395201656895115
+5,Total iron responsive anemia,5,prevalence,rate,6,169,2,China,Female,Reproductive age,0.07298796147821261,0.06177086065913602,0.08412053043418949
+6,Total iron responsive anemia,3,ylds,count,6,169,2,China,Female,Reproductive age,890421.7015785174,585212.9809590015,1265556.5778894147
+7,Total iron responsive anemia,5,prevalence,count,6,169,2,China,Female,Reproductive age,32530283.063885603,27530890.596819263,37492000.20232434
+8,Total iron responsive anemia,3,ylds,rate,11,169,2,Indonesia,Female,Reproductive age,0.006179685350358195,0.004108453548878268,0.008836181513118399
+9,Total iron responsive anemia,5,prevalence,rate,11,169,2,Indonesia,Female,Reproductive age,0.2063309034327728,0.17694662636546485,0.23855365276006485
+10,Total iron responsive anemia,3,ylds,count,11,169,2,Indonesia,Female,Reproductive age,551310.4392380266,366528.90919273405,788305.3642693746
+11,Total iron responsive anemia,5,prevalence,count,11,169,2,Indonesia,Female,Reproductive age,18407471.343716126,15786001.515041042,21282170.794887457
+12,Total iron responsive anemia,3,ylds,rate,15,169,2,Myanmar,Female,Reproductive age,0.009694129750444636,0.00652430258677229,0.01371583533026611
+13,Total iron responsive anemia,5,prevalence,rate,15,169,2,Myanmar,Female,Reproductive age,0.2946749972803229,0.2666668002781125,0.3262571418168421
+14,Total iron responsive anemia,3,ylds,count,15,169,2,Myanmar,Female,Reproductive age,184230.38760364335,123989.9635497845,260660.18551967212
+15,Total iron responsive anemia,5,prevalence,count,15,169,2,Myanmar,Female,Reproductive age,5600099.272816773,5067822.4080925565,6200296.596258865
+16,Total iron responsive anemia,3,ylds,rate,20,169,2,Viet Nam,Female,Reproductive age,0.0029761106854542083,0.001961157819502457,0.0044007512043792415
+17,Total iron responsive anemia,5,prevalence,rate,20,169,2,Viet Nam,Female,Reproductive age,0.10642784632822164,0.08241456670063027,0.13412299266783603
+18,Total iron responsive anemia,3,ylds,count,20,169,2,Viet Nam,Female,Reproductive age,97095.74452204867,63982.86177342463,143574.70531385564
+19,Total iron responsive anemia,5,prevalence,count,20,169,2,Viet Nam,Female,Reproductive age,3472213.257263231,2688778.932977915,4375768.6480740905
+20,Total iron responsive anemia,3,ylds,rate,141,169,2,Egypt,Female,Reproductive age,0.00404659595379818,0.0026794698926729484,0.006137024325123327
+21,Total iron responsive anemia,5,prevalence,rate,141,169,2,Egypt,Female,Reproductive age,0.1600248916036193,0.13021281099095625,0.19266191780231023
+22,Total iron responsive anemia,3,ylds,count,141,169,2,Egypt,Female,Reproductive age,129312.50612839292,85624.79942972725,196113.96954710304
+23,Total iron responsive anemia,5,prevalence,count,141,169,2,Egypt,Female,Reproductive age,5113735.1028994005,4161064.04284293,6156679.765157922
+24,Total iron responsive anemia,3,ylds,rate,161,169,2,Bangladesh,Female,Reproductive age,0.0068389400250345265,0.004311707096736354,0.010376323308444983
+25,Total iron responsive anemia,5,prevalence,rate,161,169,2,Bangladesh,Female,Reproductive age,0.2556358970687234,0.21374785168926216,0.2992555399976006
+26,Total iron responsive anemia,3,ylds,count,161,169,2,Bangladesh,Female,Reproductive age,384534.890601201,242435.49595093363,583432.276588131
+27,Total iron responsive anemia,5,prevalence,count,161,169,2,Bangladesh,Female,Reproductive age,14373707.234340772,12018457.021803932,16826320.44052758
+28,Total iron responsive anemia,3,ylds,rate,163,169,2,India,Female,Reproductive age,0.014108067980746207,0.009741363926762451,0.019833915298127027
+29,Total iron responsive anemia,5,prevalence,rate,163,169,2,India,Female,Reproductive age,0.3861378433008222,0.37589863572293597,0.3952855949968729
+30,Total iron responsive anemia,3,ylds,count,163,169,2,India,Female,Reproductive age,6538558.035378756,4514755.20714867,9192272.565072427
+31,Total iron responsive anemia,5,prevalence,count,163,169,2,India,Female,Reproductive age,178960343.93398723,174214856.94911677,183199982.2345321
+32,Total iron responsive anemia,3,ylds,rate,164,169,2,Nepal,Female,Reproductive age,0.009529037184050505,0.006057388911469659,0.014079579066530333
+33,Total iron responsive anemia,5,prevalence,rate,164,169,2,Nepal,Female,Reproductive age,0.3192334738584085,0.27959294462015694,0.36192007145101546
+34,Total iron responsive anemia,3,ylds,count,164,169,2,Nepal,Female,Reproductive age,105053.25829813561,66779.93060977773,155220.89250327714
+35,Total iron responsive anemia,5,prevalence,count,164,169,2,Nepal,Female,Reproductive age,3519402.4263848197,3082383.7983002253,3990002.5590268187
+36,Total iron responsive anemia,3,ylds,rate,165,169,2,Pakistan,Female,Reproductive age,0.013759534606361675,0.008873609935259855,0.019625596608063567
+37,Total iron responsive anemia,5,prevalence,rate,165,169,2,Pakistan,Female,Reproductive age,0.362488739594924,0.32453309177687795,0.40138893175785373
+38,Total iron responsive anemia,3,ylds,count,165,169,2,Pakistan,Female,Reproductive age,990816.9567132317,638984.0530688777,1413229.041619806
+39,Total iron responsive anemia,5,prevalence,count,165,169,2,Pakistan,Female,Reproductive age,26102626.29393013,23369459.763445288,28903808.973220292
+40,Total iron responsive anemia,3,ylds,rate,168,169,2,Angola,Female,Reproductive age,0.0056928564322928105,0.0035558767613334003,0.008420169079540728
+41,Total iron responsive anemia,5,prevalence,rate,168,169,2,Angola,Female,Reproductive age,0.1794695852268825,0.14914259853953496,0.21259487282407552
+42,Total iron responsive anemia,3,ylds,count,168,169,2,Angola,Female,Reproductive age,54320.65756099208,33929.81470352776,80344.39768774761
+43,Total iron responsive anemia,5,prevalence,count,168,169,2,Angola,Female,Reproductive age,1712480.5442873908,1423103.5191870604,2028558.672302257
+44,Total iron responsive anemia,3,ylds,rate,171,169,2,Democratic Republic of the Congo,Female,Reproductive age,0.007339678053085173,0.004655261285699382,0.010826576713945567
+45,Total iron responsive anemia,5,prevalence,rate,171,169,2,Democratic Republic of the Congo,Female,Reproductive age,0.21460784003460026,0.178088287905363,0.24979703365823558
+46,Total iron responsive anemia,3,ylds,count,171,169,2,Democratic Republic of the Congo,Female,Reproductive age,202057.64158776318,128156.99947054882,298050.206217056
+47,Total iron responsive anemia,5,prevalence,count,171,169,2,Democratic Republic of the Congo,Female,Reproductive age,5908045.790292931,4902680.9062060425,6876786.57449915
+48,Total iron responsive anemia,3,ylds,rate,179,169,2,Ethiopia,Female,Reproductive age,0.005136536756983675,0.003418434322613674,0.007256525129246582
+49,Total iron responsive anemia,5,prevalence,rate,179,169,2,Ethiopia,Female,Reproductive age,0.15088008247205534,0.13551375568459048,0.16676419858394287
+50,Total iron responsive anemia,3,ylds,count,179,169,2,Ethiopia,Female,Reproductive age,177368.84734437958,118041.35436198133,250573.7929646985
+51,Total iron responsive anemia,5,prevalence,count,179,169,2,Ethiopia,Female,Reproductive age,5210013.591143555,4679401.663466005,5758505.210914267
+52,Total iron responsive anemia,3,ylds,rate,180,169,2,Kenya,Female,Reproductive age,0.005456767917489998,0.0037847279273972387,0.007465650847657946
+53,Total iron responsive anemia,5,prevalence,rate,180,169,2,Kenya,Female,Reproductive age,0.14930047991234238,0.14060039598253893,0.1573869076844108
+54,Total iron responsive anemia,3,ylds,count,180,169,2,Kenya,Female,Reproductive age,92778.42759109876,64349.6500627338,126934.36060745339
+55,Total iron responsive anemia,5,prevalence,count,180,169,2,Kenya,Female,Reproductive age,2538474.051730448,2390551.303480411,2675963.141401426
+56,Total iron responsive anemia,3,ylds,rate,181,169,2,Madagascar,Female,Reproductive age,0.006772513829298237,0.004203856647788306,0.01005400551460097
+57,Total iron responsive anemia,5,prevalence,rate,181,169,2,Madagascar,Female,Reproductive age,0.21271434645826248,0.17680640990272523,0.24998550989105012
+58,Total iron responsive anemia,3,ylds,count,181,169,2,Madagascar,Female,Reproductive age,58971.23299548584,36604.81412144035,87544.61292858946
+59,Total iron responsive anemia,5,prevalence,count,181,169,2,Madagascar,Female,Reproductive age,1852196.6292939258,1539530.557820857,2176732.9120106054
+60,Total iron responsive anemia,3,ylds,rate,184,169,2,Mozambique,Female,Reproductive age,0.006666917594639898,0.004295093546989645,0.009722178629929207
+61,Total iron responsive anemia,5,prevalence,rate,184,169,2,Mozambique,Female,Reproductive age,0.19152156302006543,0.1633964678305881,0.21920008126763416
+62,Total iron responsive anemia,3,ylds,count,184,169,2,Mozambique,Female,Reproductive age,63099.77519629604,40651.38550385022,92016.62946306475
+63,Total iron responsive anemia,5,prevalence,count,184,169,2,Mozambique,Female,Reproductive age,1812676.9080700062,1546483.8497881296,2074643.2897442498
+64,Total iron responsive anemia,3,ylds,rate,189,169,2,United Republic of Tanzania,Female,Reproductive age,0.008487470746900691,0.005493434299148144,0.01234213235243514
+65,Total iron responsive anemia,5,prevalence,rate,189,169,2,United Republic of Tanzania,Female,Reproductive age,0.24203511531123534,0.20454909365723603,0.2794297728353832
+66,Total iron responsive anemia,3,ylds,count,189,169,2,United Republic of Tanzania,Female,Reproductive age,156623.2109799122,101372.87596000866,227755.0588416852
+67,Total iron responsive anemia,5,prevalence,count,189,169,2,United Republic of Tanzania,Female,Reproductive age,4466385.577090995,3774638.7359657018,5156446.433803213
+68,Total iron responsive anemia,3,ylds,rate,190,169,2,Uganda,Female,Reproductive age,0.004069202605636365,0.0024537531297084076,0.006455168839557009
+69,Total iron responsive anemia,5,prevalence,rate,190,169,2,Uganda,Female,Reproductive age,0.12307499050077493,0.09698255279067186,0.15107425027244528
+70,Total iron responsive anemia,3,ylds,count,190,169,2,Uganda,Female,Reproductive age,53170.09664401228,32061.881329386546,84346.24281849635
+71,Total iron responsive anemia,5,prevalence,count,190,169,2,Uganda,Female,Reproductive age,1608155.153130726,1267219.2083826293,1974006.5231161981
+72,Total iron responsive anemia,3,ylds,rate,196,169,2,South Africa,Female,Reproductive age,0.006525383568576314,0.004450573532839355,0.009171777910068624
+73,Total iron responsive anemia,5,prevalence,rate,196,169,2,South Africa,Female,Reproductive age,0.18225760100525865,0.1640326670845131,0.20221290463219874
+74,Total iron responsive anemia,3,ylds,count,196,169,2,South Africa,Female,Reproductive age,123285.49216886234,84085.65453103685,173284.39651448914
+75,Total iron responsive anemia,5,prevalence,count,196,169,2,South Africa,Female,Reproductive age,3443432.528572695,3099104.8849098533,3820452.423751539
+76,Total iron responsive anemia,3,ylds,rate,201,169,2,Burkina Faso,Female,Reproductive age,0.008235344980352713,0.0047133586955353315,0.013035601034473338
+77,Total iron responsive anemia,5,prevalence,rate,201,169,2,Burkina Faso,Female,Reproductive age,0.23059723631092022,0.17243853496360592,0.2996817415109273
+78,Total iron responsive anemia,3,ylds,count,201,169,2,Burkina Faso,Female,Reproductive age,59063.35063567511,33803.89746516587,93490.4702210657
+79,Total iron responsive anemia,5,prevalence,count,201,169,2,Burkina Faso,Female,Reproductive age,1653828.1585462117,1236717.7911739862,2149297.6700062384
+80,Total iron responsive anemia,3,ylds,rate,202,169,2,Cameroon,Female,Reproductive age,0.0059631604890640275,0.0037380755979315836,0.008696957227441597
+81,Total iron responsive anemia,5,prevalence,rate,202,169,2,Cameroon,Female,Reproductive age,0.17665194989856284,0.14431678800526898,0.2110464495153751
+82,Total iron responsive anemia,3,ylds,count,202,169,2,Cameroon,Female,Reproductive age,57005.26108729679,35734.4022209252,83139.18740315123
+83,Total iron responsive anemia,5,prevalence,count,202,169,2,Cameroon,Female,Reproductive age,1688717.0056910943,1379606.7026214972,2017513.6956710175
+84,Total iron responsive anemia,3,ylds,rate,205,169,2,Côte d'Ivoire,Female,Reproductive age,0.007702394671357914,0.0048829072235650065,0.011336084744067958
+85,Total iron responsive anemia,5,prevalence,rate,205,169,2,Côte d'Ivoire,Female,Reproductive age,0.2222862210107473,0.182874009100658,0.2589750929558479
+86,Total iron responsive anemia,3,ylds,count,205,169,2,Côte d'Ivoire,Female,Reproductive age,62923.10754632069,39889.892621267085,92607.78107848372
+87,Total iron responsive anemia,5,prevalence,count,205,169,2,Côte d'Ivoire,Female,Reproductive age,1815920.942448746,1493951.0935290563,2115643.0332602463
+88,Total iron responsive anemia,3,ylds,rate,207,169,2,Ghana,Female,Reproductive age,0.007815008486995914,0.004843558851830907,0.011525691421553068
+89,Total iron responsive anemia,5,prevalence,rate,207,169,2,Ghana,Female,Reproductive age,0.24548166006684263,0.20229965454450802,0.2888713587291867
+90,Total iron responsive anemia,3,ylds,count,207,169,2,Ghana,Female,Reproductive age,85751.1470380553,53146.5484627366,126467.07440554134
+91,Total iron responsive anemia,5,prevalence,count,207,169,2,Ghana,Female,Reproductive age,2693577.87167669,2219757.9761378146,3169676.7058779327
+92,Total iron responsive anemia,3,ylds,rate,213,169,2,Niger,Female,Reproductive age,0.008658638705407645,0.00549864259372499,0.013022040646620775
+93,Total iron responsive anemia,5,prevalence,rate,213,169,2,Niger,Female,Reproductive age,0.23895005824948248,0.19341890100169776,0.2807041653244767
+94,Total iron responsive anemia,3,ylds,count,213,169,2,Niger,Female,Reproductive age,58348.027495678456,37053.74021983397,87751.71381435991
+95,Total iron responsive anemia,5,prevalence,count,213,169,2,Niger,Female,Reproductive age,1610214.3816356845,1303393.262821173,1891583.0667787334
+96,Total iron responsive anemia,3,ylds,rate,214,169,2,Nigeria,Female,Reproductive age,0.009171589401049769,0.005893373562383673,0.013429283210055884
+97,Total iron responsive anemia,5,prevalence,rate,214,169,2,Nigeria,Female,Reproductive age,0.2685425542106242,0.2355270710706057,0.303875236615399
+98,Total iron responsive anemia,3,ylds,count,214,169,2,Nigeria,Female,Reproductive age,657308.3325701952,422365.56611008965,962448.2048230818
+99,Total iron responsive anemia,5,prevalence,count,214,169,2,Nigeria,Female,Reproductive age,19245874.495005514,16879724.940896492,21778092.79885333
+100,Total iron responsive anemia,3,ylds,rate,522,169,2,Sudan,Female,Reproductive age,0.005948325089088982,0.0038177707286867744,0.008993466629259842
+101,Total iron responsive anemia,5,prevalence,rate,522,169,2,Sudan,Female,Reproductive age,0.18592410792123293,0.15236718126907683,0.22360214085222482
+102,Total iron responsive anemia,3,ylds,count,522,169,2,Sudan,Female,Reproductive age,80849.14484956764,51890.82540431729,122238.45793877807
+103,Total iron responsive anemia,5,prevalence,count,522,169,2,Sudan,Female,Reproductive age,2527065.166616946,2070962.1825041522,3039181.887956245
+104,Total iron responsive anemia,3,ylds,rate,1,1,3,Global,Both,Under Five,0.010304905129185872,0.006890595161730948,0.014917081974457179
+105,Total iron responsive anemia,5,prevalence,rate,1,1,3,Global,Both,Under Five,0.341245151428417,0.3332895201692751,0.34907462978645315
+106,Total iron responsive anemia,3,ylds,count,1,1,3,Global,Both,Under Five,6830530.94982071,4567380.575060813,9887678.6181138
+107,Total iron responsive anemia,5,prevalence,count,1,1,3,Global,Both,Under Five,226191851.26765028,220918519.3097438,231381563.69829184
+108,Total iron responsive anemia,3,ylds,rate,6,1,3,China,Both,Under Five,0.0015460485918129473,0.0008687569726813556,0.0024480560019255197
+109,Total iron responsive anemia,5,prevalence,rate,6,1,3,China,Both,Under Five,0.07470230928553293,0.059343195106608494,0.09168367660103016
+110,Total iron responsive anemia,3,ylds,count,6,1,3,China,Both,Under Five,125988.82815814616,70795.75216584468,199494.1870400336
+111,Total iron responsive anemia,5,prevalence,count,6,1,3,China,Both,Under Five,6087555.3701422,4835927.958690195,7471381.583582062
+112,Total iron responsive anemia,3,ylds,rate,11,1,3,Indonesia,Both,Under Five,0.0033857308148652443,0.0019575677939289936,0.005684995620815568
+113,Total iron responsive anemia,5,prevalence,rate,11,1,3,Indonesia,Both,Under Five,0.1665445158782206,0.12608909212686278,0.2180818666647448
+114,Total iron responsive anemia,3,ylds,count,11,1,3,Indonesia,Both,Under Five,66720.40890638674,38576.523301694986,112030.53437871413
+115,Total iron responsive anemia,5,prevalence,count,11,1,3,Indonesia,Both,Under Five,3281985.133526737,2484756.2447678484,4297598.395907623
+116,Total iron responsive anemia,3,ylds,rate,15,1,3,Myanmar,Both,Under Five,0.016816583879904784,0.010575950794792158,0.025960584976136833
+117,Total iron responsive anemia,5,prevalence,rate,15,1,3,Myanmar,Both,Under Five,0.5760517395735156,0.5064235404282501,0.6459082830815301
+118,Total iron responsive anemia,3,ylds,count,15,1,3,Myanmar,Both,Under Five,84396.88773593422,53077.2086829975,130287.61319404226
+119,Total iron responsive anemia,5,prevalence,count,15,1,3,Myanmar,Both,Under Five,2891013.676860445,2541572.7114132154,3241600.6273475424
+120,Total iron responsive anemia,3,ylds,rate,20,1,3,Viet Nam,Both,Under Five,0.00421115506841574,0.002274198276638442,0.007343753374105101
+121,Total iron responsive anemia,5,prevalence,rate,20,1,3,Viet Nam,Both,Under Five,0.18952163238761927,0.13665758482055093,0.25773657406083983
+122,Total iron responsive anemia,3,ylds,count,20,1,3,Viet Nam,Both,Under Five,29214.672667022172,15777.134100381896,50946.91301703437
+123,Total iron responsive anemia,5,prevalence,count,20,1,3,Viet Nam,Both,Under Five,1314796.620777725,948054.997533059,1788034.2858853363
+124,Total iron responsive anemia,3,ylds,rate,141,1,3,Egypt,Both,Under Five,0.004849846458943224,0.002744642338065151,0.007833912565975548
+125,Total iron responsive anemia,5,prevalence,rate,141,1,3,Egypt,Both,Under Five,0.24030295987526162,0.18846495605807118,0.29847451772710265
+126,Total iron responsive anemia,3,ylds,count,141,1,3,Egypt,Both,Under Five,52500.52933730209,29711.286080877086,84803.62419256406
+127,Total iron responsive anemia,5,prevalence,count,141,1,3,Egypt,Both,Under Five,2601326.1866275077,2040169.73286534,3231044.5922412425
+128,Total iron responsive anemia,3,ylds,rate,161,1,3,Bangladesh,Both,Under Five,0.010267144955347472,0.005836856029418473,0.016528450002984293
+129,Total iron responsive anemia,5,prevalence,rate,161,1,3,Bangladesh,Both,Under Five,0.4250658100197067,0.3411069525906909,0.5162978405908474
+130,Total iron responsive anemia,3,ylds,count,161,1,3,Bangladesh,Both,Under Five,141131.2682657175,80232.90775564496,227198.61475928006
+131,Total iron responsive anemia,5,prevalence,count,161,1,3,Bangladesh,Both,Under Five,5842917.1035742415,4688826.060481869,7096984.542668466
+132,Total iron responsive anemia,3,ylds,rate,163,1,3,India,Both,Under Five,0.016125287095395728,0.010797756732022256,0.023479955133449644
+133,Total iron responsive anemia,5,prevalence,rate,163,1,3,India,Both,Under Five,0.4957949101675466,0.4813085904907263,0.5094417644077065
+134,Total iron responsive anemia,3,ylds,count,163,1,3,India,Both,Under Five,1887799.6364970347,1264101.6009888775,2748816.222847233
+135,Total iron responsive anemia,5,prevalence,count,163,1,3,India,Both,Under Five,58043087.58376282,56347163.110710196,59640735.19905755
+136,Total iron responsive anemia,3,ylds,rate,164,1,3,Nepal,Both,Under Five,0.01304833916182728,0.00798231788303689,0.020220983952659803
+137,Total iron responsive anemia,5,prevalence,rate,164,1,3,Nepal,Both,Under Five,0.5094588213781412,0.4259225161643711,0.60012363522261
+138,Total iron responsive anemia,3,ylds,count,164,1,3,Nepal,Both,Under Five,39092.40241634732,23914.7663950808,60581.41439520794
+139,Total iron responsive anemia,5,prevalence,count,164,1,3,Nepal,Both,Under Five,1526322.163523782,1276050.09293375,1797951.0155833608
+140,Total iron responsive anemia,3,ylds,rate,165,1,3,Pakistan,Both,Under Five,0.014685204165092149,0.00875240488444184,0.022941214348666094
+141,Total iron responsive anemia,5,prevalence,rate,165,1,3,Pakistan,Both,Under Five,0.4519488319413336,0.3722646574369422,0.5307642666364368
+142,Total iron responsive anemia,3,ylds,count,165,1,3,Pakistan,Both,Under Five,448287.6357121801,267180.13916135085,700314.5904621703
+143,Total iron responsive anemia,5,prevalence,count,165,1,3,Pakistan,Both,Under Five,13796408.347897869,11363930.747268865,16202366.377482664
+144,Total iron responsive anemia,3,ylds,rate,168,1,3,Angola,Both,Under Five,0.012740175511605847,0.007620689670048332,0.019762120129553824
+145,Total iron responsive anemia,5,prevalence,rate,168,1,3,Angola,Both,Under Five,0.45148151933896724,0.38739280310328206,0.5182855223861966
+146,Total iron responsive anemia,3,ylds,count,168,1,3,Angola,Both,Under Five,65575.59768921127,39224.83481190507,101718.60175089068
+147,Total iron responsive anemia,5,prevalence,count,168,1,3,Angola,Both,Under Five,2323843.2193744737,1993968.9669781202,2667693.4609871814
+148,Total iron responsive anemia,3,ylds,rate,171,1,3,Democratic Republic of the Congo,Both,Under Five,0.014128890000277035,0.00898938067167539,0.020813424059309454
+149,Total iron responsive anemia,5,prevalence,rate,171,1,3,Democratic Republic of the Congo,Both,Under Five,0.4642786523675435,0.4081777854518681,0.5218401821549767
+150,Total iron responsive anemia,3,ylds,count,171,1,3,Democratic Republic of the Congo,Both,Under Five,192569.21389443215,122520.45060216266,283675.8379090002
+151,Total iron responsive anemia,5,prevalence,count,171,1,3,Democratic Republic of the Congo,Both,Under Five,6327869.713235162,5563244.9026140915,7112402.5775655955
+152,Total iron responsive anemia,3,ylds,rate,179,1,3,Ethiopia,Both,Under Five,0.017569857949121945,0.011749221896920174,0.02622020334988885
+153,Total iron responsive anemia,5,prevalence,rate,179,1,3,Ethiopia,Both,Under Five,0.5273801125739166,0.5013990485283935,0.5530489044786508
+154,Total iron responsive anemia,3,ylds,count,179,1,3,Ethiopia,Both,Under Five,293059.4307962774,195973.14283253267,437344.33660945354
+155,Total iron responsive anemia,5,prevalence,count,179,1,3,Ethiopia,Both,Under Five,8796526.190008981,8363170.618056668,9224673.165733702
+156,Total iron responsive anemia,3,ylds,rate,180,1,3,Kenya,Both,Under Five,0.00806038934876247,0.0051958823539320865,0.0119037722042403
+157,Total iron responsive anemia,5,prevalence,rate,180,1,3,Kenya,Both,Under Five,0.32975522563812476,0.3086007995810294,0.34974524869893836
+158,Total iron responsive anemia,3,ylds,count,180,1,3,Kenya,Both,Under Five,51715.80289849201,33337.003471297576,76375.11172553414
+159,Total iron responsive anemia,5,prevalence,count,180,1,3,Kenya,Both,Under Five,2115723.6351699675,1979995.932566192,2243980.4783345056
+160,Total iron responsive anemia,3,ylds,rate,181,1,3,Madagascar,Both,Under Five,0.010840425877670808,0.006695919560776827,0.016393714524102397
+161,Total iron responsive anemia,5,prevalence,rate,181,1,3,Madagascar,Both,Under Five,0.41020085992022143,0.35511983804674335,0.46760684116353407
+162,Total iron responsive anemia,3,ylds,count,181,1,3,Madagascar,Both,Under Five,42702.40524321738,26376.44256663779,64577.8172324216
+163,Total iron responsive anemia,5,prevalence,count,181,1,3,Madagascar,Both,Under Five,1615855.6452574702,1398881.5020094046,1841988.225480709
+164,Total iron responsive anemia,3,ylds,rate,184,1,3,Mozambique,Both,Under Five,0.019558933674712512,0.012525499467821638,0.028706828955292817
+165,Total iron responsive anemia,5,prevalence,rate,184,1,3,Mozambique,Both,Under Five,0.5682881565056872,0.5133397673735852,0.6180333999333819
+166,Total iron responsive anemia,3,ylds,count,184,1,3,Mozambique,Both,Under Five,99849.06385108066,63943.12782737029,146549.40013549666
+167,Total iron responsive anemia,5,prevalence,count,184,1,3,Mozambique,Both,Under Five,2901131.5938001066,2620618.079811419,3155082.8607713333
+168,Total iron responsive anemia,3,ylds,rate,189,1,3,United Republic of Tanzania,Both,Under Five,0.015396397612879,0.00954269190798444,0.02222532110756568
+169,Total iron responsive anemia,5,prevalence,rate,189,1,3,United Republic of Tanzania,Both,Under Five,0.5147962327423267,0.45148069077549297,0.5802732265630762
+170,Total iron responsive anemia,3,ylds,count,189,1,3,United Republic of Tanzania,Both,Under Five,143298.53682698918,88816.47656728822,206857.21915625554
+171,Total iron responsive anemia,5,prevalence,count,189,1,3,United Republic of Tanzania,Both,Under Five,4791351.118024763,4202055.832829896,5400763.634267822
+172,Total iron responsive anemia,3,ylds,rate,190,1,3,Uganda,Both,Under Five,0.010876343927751332,0.006760041431241263,0.016402518311054947
+173,Total iron responsive anemia,5,prevalence,rate,190,1,3,Uganda,Both,Under Five,0.3730481545316851,0.31193114529485866,0.4295072763210479
+174,Total iron responsive anemia,3,ylds,count,190,1,3,Uganda,Both,Under Five,77110.55736011863,47927.00249304084,116289.75117712149
+175,Total iron responsive anemia,5,prevalence,count,190,1,3,Uganda,Both,Under Five,2644818.084936122,2211513.7799471603,3045099.133251655
+176,Total iron responsive anemia,3,ylds,rate,196,1,3,South Africa,Both,Under Five,0.0032140861890470225,0.0017401864604576277,0.005392847303820638
+177,Total iron responsive anemia,5,prevalence,rate,196,1,3,South Africa,Both,Under Five,0.15530076053903888,0.11508006135672709,0.19686196147023383
+178,Total iron responsive anemia,3,ylds,count,196,1,3,South Africa,Both,Under Five,16374.249372992068,8865.427179936996,27474.00703943448
+179,Total iron responsive anemia,5,prevalence,count,196,1,3,South Africa,Both,Under Five,791183.9419699971,586278.4977377933,1002918.6087650385
+180,Total iron responsive anemia,3,ylds,rate,201,1,3,Burkina Faso,Both,Under Five,0.029747310327451287,0.019728144435025602,0.043543096311736126
+181,Total iron responsive anemia,5,prevalence,rate,201,1,3,Burkina Faso,Both,Under Five,0.6709288828648673,0.6066779289176576,0.7517868154651339
+182,Total iron responsive anemia,3,ylds,count,201,1,3,Burkina Faso,Both,Under Five,120326.60038614395,79799.5020612958,176129.96576173333
+183,Total iron responsive anemia,5,prevalence,count,201,1,3,Burkina Faso,Both,Under Five,2713878.689782027,2453986.3238863433,3040945.575390964
+184,Total iron responsive anemia,3,ylds,rate,202,1,3,Cameroon,Both,Under Five,0.012480883262326074,0.0077980323462236885,0.01905570266497369
+185,Total iron responsive anemia,5,prevalence,rate,202,1,3,Cameroon,Both,Under Five,0.4325868964754578,0.3691233355650892,0.5002844313556738
+186,Total iron responsive anemia,3,ylds,count,202,1,3,Cameroon,Both,Under Five,52508.439414610846,32807.174011541094,80169.4229371495
+187,Total iron responsive anemia,5,prevalence,count,202,1,3,Cameroon,Both,Under Five,1819940.3333657002,1552942.199254758,2104751.258527245
+188,Total iron responsive anemia,3,ylds,rate,205,1,3,Côte d'Ivoire,Both,Under Five,0.018614276252275044,0.011913436503065485,0.02812165945068562
+189,Total iron responsive anemia,5,prevalence,rate,205,1,3,Côte d'Ivoire,Both,Under Five,0.5763156475827326,0.5141792820736992,0.6273899598470638
+190,Total iron responsive anemia,3,ylds,count,205,1,3,Côte d'Ivoire,Both,Under Five,74680.44880580262,47796.68963812774,112824.05614263206
+191,Total iron responsive anemia,5,prevalence,count,205,1,3,Côte d'Ivoire,Both,Under Five,2312177.526108485,2062886.5195452378,2517087.5914075207
+192,Total iron responsive anemia,3,ylds,rate,207,1,3,Ghana,Both,Under Five,0.017105684431422064,0.010785604637019126,0.026012615106410817
+193,Total iron responsive anemia,5,prevalence,rate,207,1,3,Ghana,Both,Under Five,0.5399330366988596,0.4703874368818045,0.6033983126294968
+194,Total iron responsive anemia,3,ylds,count,207,1,3,Ghana,Both,Under Five,67920.42621840634,42825.697323393084,103286.59529327574
+195,Total iron responsive anemia,5,prevalence,count,207,1,3,Ghana,Both,Under Five,2143876.915829216,1867736.7356378748,2395874.3502820204
+196,Total iron responsive anemia,3,ylds,rate,213,1,3,Niger,Both,Under Five,0.01914985579742463,0.012083843113907509,0.02853912250250577
+197,Total iron responsive anemia,5,prevalence,rate,213,1,3,Niger,Both,Under Five,0.5753243398013438,0.5040819120246142,0.6402986672608721
+198,Total iron responsive anemia,3,ylds,count,213,1,3,Niger,Both,Under Five,92931.63841517552,58641.242566347886,138496.46917163444
+199,Total iron responsive anemia,5,prevalence,count,213,1,3,Niger,Both,Under Five,2791970.5549458186,2446240.7694057794,3107282.10452679
+200,Total iron responsive anemia,3,ylds,rate,214,1,3,Nigeria,Both,Under Five,0.02114333601168463,0.013561298275481063,0.030671500889481132
+201,Total iron responsive anemia,5,prevalence,rate,214,1,3,Nigeria,Both,Under Five,0.5799961374663084,0.5399721891327856,0.6193040916889289
+202,Total iron responsive anemia,3,ylds,count,214,1,3,Nigeria,Both,Under Five,708759.2523168717,454596.92930501804,1028158.9445417343
+203,Total iron responsive anemia,5,prevalence,count,214,1,3,Nigeria,Both,Under Five,19442420.463360976,18100752.162769247,20760087.468678102
+204,Total iron responsive anemia,3,ylds,rate,522,1,3,Sudan,Both,Under Five,0.01256872606022481,0.007775405620171783,0.018909382554579846
+205,Total iron responsive anemia,5,prevalence,rate,522,1,3,Sudan,Both,Under Five,0.422667504073579,0.36598397747620953,0.48059830371262874
+206,Total iron responsive anemia,3,ylds,count,522,1,3,Sudan,Both,Under Five,69288.20524307218,42863.84299229155,104242.63948338949
+207,Total iron responsive anemia,5,prevalence,count,522,1,3,Sudan,Both,Under Five,2330058.9599534455,2017577.0261472259,2649416.7943156958

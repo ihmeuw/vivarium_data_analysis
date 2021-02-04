@@ -1,0 +1,163 @@
+,sequela_id,sequela_name
+144,144,Mild anemia due to schistosomiasis
+145,145,Moderate anemia due to schistosomiasis
+146,146,Severe anemia due to schistosomiasis
+172,172,Mild anemia due to hookworm disease
+173,173,Moderate anemia due to hookworm disease
+174,174,Severe anemia due to hookworm disease
+177,177,Mild anemia due to other neglected tropical diseases
+178,178,Moderate anemia due to other neglected tropical diseases
+179,179,Severe anemia due to other neglected tropical diseases
+182,182,Mild anemia due to maternal hemorrhage
+183,183,Moderate anemia due to maternal hemorrhage
+184,184,Severe anemia due to maternal hemorrhage
+206,206,Mild iron-deficiency anemia
+207,207,Moderate iron-deficiency anemia
+208,208,Severe iron-deficiency anemia
+238,240,Mild anemia due to other infectious diseases
+239,241,Moderate anemia due to other infectious diseases
+240,242,Severe anemia due to other infectious diseases
+518,525,"Menstrual disorders, with mild anemia"
+519,526,"Menstrual disorders, with moderate anemia"
+520,527,"Menstrual disorders, with severe anemia"
+530,537,"Mild anemia due to endocrine, metabolic, blood, and immune disorders"
+531,538,"Moderate anemia due to endocrine, metabolic, blood, and immune disorders"
+532,539,"Severe anemia due to endocrine, metabolic, blood, and immune disorders"
+983,1004,Stage IV chronic kidney disease and mild anemia due to diabetes mellitus
+984,1005,Stage IV chronic kidney disease and moderate anemia due to diabetes mellitus
+985,1006,Stage IV chronic kidney disease and severe anemia due to diabetes mellitus
+987,1008,Stage III chronic kidney disease and mild anemia due to diabetes mellitus
+988,1009,Stage III chronic kidney disease and moderate anemia due to diabetes mellitus
+989,1010,Stage III chronic kidney disease and severe anemia due to diabetes mellitus
+991,1012,Stage IV chronic kidney disease and mild anemia due to hypertension
+992,1013,Stage IV chronic kidney disease and moderate anemia due to hypertension
+993,1014,Stage IV chronic kidney disease and severe anemia due to hypertension
+995,1016,"Stage 3 chronic kidney disease due to hypertension, with mild anemia"
+996,1017,"Stage 3 chronic kidney disease due to hypertension, with moderate anemia"
+997,1018,"Stage 3 chronic kidney disease due to hypertension, with severe anemia"
+999,1020,Stage IV chronic kidney disease and mild anemia due to glomerulonephritis
+1000,1021,Stage IV chronic kidney disease and moderate anemia due to glomerulonephritis
+1001,1022,Stage IV chronic kidney disease and severe anemia due to glomerulonephritis
+1003,1024,"Stage 3 chronic kidney disease due to glomerulonephritis, with mild anemia"
+1004,1025,"Stage 3 chronic kidney disease due to glomerulonephritis, with moderate anemia"
+1005,1026,"Stage 3 chronic kidney disease due to glomerulonephritis, with severe anemia"
+1007,1028,Stage IV chronic kidney disease and mild anemia due to other causes
+1008,1029,Stage IV chronic kidney disease and moderate anemia due to other causes
+1009,1030,Stage IV chronic kidney disease and severe anemia due to other causes
+1011,1032,"Stage 3 chronic kidney disease due to other and unspecified causes, with mild anemia"
+1012,1033,"Stage 3 chronic kidney disease due to other and unspecified causes, with moderate anemia"
+1013,1034,"Stage 3 chronic kidney disease due to other and unspecified causes, with severe anemia"
+1084,1106,"Uterine fibroids, symptomatic, with mild anemia"
+1085,1107,"Uterine fibroids, symptomatic, with moderate anemia"
+1086,1108,"Uterine fibroids, symptomatic, with severe anemia"
+1311,1361,Stage V chronic kidney disease untreated and mild anemia due to diabetes mellitus
+1312,1364,Stage V chronic kidney disease untreated and moderate anemia due to diabetes mellitus
+1313,1367,Stage V chronic kidney disease untreated and severe anemia due to diabetes mellitus
+1315,1373,"Stage 5 chronic kidney disease untreated due to hypertension, with mild anemia"
+1316,1376,"Stage 5 chronic kidney disease untreated due to hypertension, with moderate anemia"
+1317,1379,"Stage 5 chronic kidney disease untreated due to hypertension, with severe anemia"
+1319,1385,"Stage 5 chronic kidney disease untreated due to glomerulonephritis, with mild anemia"
+1320,1388,"Stage 5 chronic kidney disease untreated due to glomerulonephritis, with moderate anemia"
+1321,1391,"Stage 5 chronic kidney disease untreated due to glomerulonephritis, with severe anemia"
+1323,1397,"Stage 5 chronic kidney disease untreated due to other and unspecified causes, with mild anemia"
+1324,1400,"Stage 5 chronic kidney disease untreated due to other and unspecified causes, with moderate anemia"
+1325,1403,"Stage 5 chronic kidney disease untreated due to other and unspecified causes, with severe anemia"
+1327,1409,Stage IV chronic kidney disease untreated and mild anemia due to diabetes mellitus
+1328,1412,Stage IV chronic kidney disease untreated and moderate anemia due to diabetes mellitus
+1329,1415,Stage IV chronic kidney disease untreated and severe anemia due to diabetes mellitus
+1331,1421,"Stage 4 chronic kidney disease untreated due to hypertension, with mild anemia"
+1332,1424,"Stage 4 chronic kidney disease untreated due to hypertension, with moderate anemia"
+1333,1427,"Stage 4 chronic kidney disease untreated due to hypertension, with severe anemia"
+1335,1433,"Stage 4 chronic kidney disease untreated due to glomerulonephritis, with mild anemia"
+1336,1436,"Stage 4 chronic kidney disease untreated due to glomerulonephritis, with moderate anemia"
+1337,1439,"Stage 4 chronic kidney disease untreated due to glomerulonephritis, with severe anemia"
+1339,1445,"Stage 4 chronic kidney disease untreated due to other and unspecified causes, with mild anemia"
+1340,1448,"Stage 4 chronic kidney disease untreated due to other and unspecified causes, with moderate anemia"
+1341,1451,"Stage 4 chronic kidney disease untreated due to other and unspecified causes, with severe anemia"
+1824,4952,Mildly symptomatic PUD with mild anemia
+1825,4955,Moderately symptomatic PUD with mild anemia
+1826,4958,Mildly symptomatic PUD with moderate anemia
+1827,4961,Moderately symptomatic PUD with moderate anemia
+1828,4964,Mildly symptomatic PUD with severe anemia
+1829,4967,Moderately symptomatic PUD with severe anemia
+1832,4976,Asymptomatic PUD with mild anemia
+1833,4979,Asymptomatic PUD with moderate anemia
+1834,4982,Asymptomatic PUD with severe anemia
+1835,4985,Mildy symptomatic gastritis/duodenitis with mild anemia
+1836,4988,Moderately symptomatic gastritis/duodenitis with mild anemia
+1837,4991,Mildly symptomatic gastritis/duodenitis with moderate anemia
+1838,4994,Moderately symptomatic gastritis/duodenitis with moderate anemia
+1839,4997,Mildy symptomatic gastritis/duodenitis with severe anemia
+1840,5000,Moderately symptomatic gastritis/duodenitis with severe anemia
+1843,5009,Asymptomatic gastritis/duodenitis with mild anemia
+1844,5012,Asymptomatic gastritis/duodenitis with moderate anemia
+1845,5015,Asymptomatic gastritis/duodenitis with severe anemia
+1911,5213,"Stage 3 chronic kidney disease due to type 1 diabetes mellitus, with severe anemia"
+1912,5216,"Stage 3 chronic kidney disease due to type 2 diabetes mellitus, with severe anemia"
+1913,5219,"Stage 3 chronic kidney disease due to type 1 diabetes mellitus, with moderate anemia"
+1914,5222,"Stage 3 chronic kidney disease due to type 2 diabetes mellitus, with mdoerate anemia"
+1915,5225,"Stage 3 chronic kidney disease due to type 1 diabetes mellitus, with mild anemia"
+1916,5228,"Stage 3 chronic kidney disease due to type 2 diabetes mellitus, with mild anemia"
+1919,5237,"Stage 4 chronic kidney disease untreated due to type 1 diabetes mellitus, with severe anemia"
+1920,5240,"Stage 4 chronic kidney disease untreated due to type 2 diabetes mellitus, with severe anemia"
+1921,5243,"Stage 4 chronic kidney disease untreated due to type 1 diabetes mellitus, with moderate anemia"
+1922,5246,"Stage 4 chronic kidney disease untreated due to type 2 diabetes mellitus, with mdoerate anemia"
+1923,5249,"Stage 4 chronic kidney disease untreated due to type 1 diabetes mellitus, with mild anemia"
+1924,5252,"Stage 4 chronic kidney disease untreated due to type 2 diabetes mellitus, with mild anemia"
+1927,5261,"Stage 5 chronic kidney disease untreated due to type 1 diabetes mellitus, with severe anemia"
+1928,5264,"Stage 5 chronic kidney disease untreated due to type 2 diabetes mellitus, with severe anemia"
+1929,5267,"Stage 5 chronic kidney disease untreated due to type 1 diabetes mellitus, with moderate anemia"
+1930,5270,"Stage 5 chronic kidney disease untreated due to type 2 diabetes mellitus, with moderate anemia"
+1931,5273,"Stage 5 chronic kidney disease untreated due to type 1 diabetes mellitus, with mild anemia"
+1932,5276,"Stage 5 chronic kidney disease untreated due to type 2 diabetes mellitus, with mild anemia"
+1971,5393,"Vitamin A deficiency, with mild anemia"
+1972,5396,"Vitamin A deficiency, with moderate anemia"
+1973,5399,"Vitamin A deficiency, with severe anemia"
+2028,5567,Ulcerative colitis with mild anemia
+2029,5570,Ulcerative colitis with moderate anemia
+2030,5573,Ulcerative colitis with severe anemia
+2032,5579,Crohn's disease with mild anemia
+2033,5582,Crohn's disease with moderate anemia
+2034,5585,Crohn's disease with severe anemia
+2048,5627,Complicated PUD with mild anemia
+2049,5630,Complicated PUD with moderate anemia
+2050,5633,Complicated PUD with severe anemia
+2065,5678,Complicated gastritis/duodenitis with mild anemia
+2066,5681,Complicated gastritis/duodenitis with moderate anemia
+2067,5684,Complicated gastritis/duodenitis with severe anemia
+2367,7202,"Severe, acute, uncomplicated PUD with mild anemia"
+2368,7205,"Severe, acute, uncomplicated PUD with moderate anemia"
+2369,7208,"Severe, acute, uncomplicated PUD with severe anemia"
+2371,7214,"Severe, acute, uncomplicated gastritis/duodenitis with mild anemia"
+2372,7217,"Severe, acute, uncomplicated gastritis/duodenitis with moderate anemia"
+2373,7220,"Severe, acute, uncomplicated gastritis/duodenitis with severe anemia"
+2504,22989,"End-stage renal disease on dialysis due to type 1 diabetes mellitus, with mild anemia"
+2505,22990,"End-stage renal disease on dialysis due to type 2 diabetes mellitus, with mild anemia"
+2506,22991,"End-stage renal disease on dialysis due to hypertension, with mild anemia "
+2507,22992,"End-stage renal disease on dialysis due to glomerulonephritis, with mild anemia"
+2508,22993,"End-stage renal disease on dialysis due to other and unspecified causes, with mild anemia "
+2509,22999,"End-stage renal disease on dialysis due to type 1 diabetes mellitus, with moderate anemia"
+2510,23000,"End-stage renal disease on dialysis due to type 2 diabetes mellitus, with moderate anemia"
+2511,23001,"End-stage renal disease on dialysis due to hypertension, with moderate anemia"
+2512,23002,"End-stage renal disease on dialysis due to glomerulonephritis, with moderate anemia"
+2513,23003,"End-stage renal disease on dialysis due to other and unspecified causes, with moderate anemia"
+2514,23009,"End-stage renal disease on dialysis due to type 1 diabetes mellitus, with severe anemia"
+2515,23010,"End-stage renal disease on dialysis due to type 2 diabetes mellitus, with severe anemia"
+2516,23011,"End-stage renal disease on dialysis due to hypertension, with severe anemia"
+2517,23012,"End-stage renal disease on dialysis due to glomerulonephritis, with severe anemia"
+2518,23013,"End-stage renal disease on dialysis due to other and unspecified causes, with severe anemia"
+2525,23030,"Cirrhosis and other chronic liver diseases due to hepatitis B, decompensated, with mild anemia"
+2526,23031,"Cirrhosis and other chronic liver diseases due to hepatitis B, decompensated, with moderate anemia"
+2527,23032,"Cirrhosis and other chronic liver diseases due to hepatitis B, decompensated, with severe anemia"
+2529,23034,"Cirrhosis and other chronic liver diseases due to hepatitis C, decompensated, with mild anemia"
+2530,23035,"Cirrhosis and other chronic liver diseases due to hepatitis C, decompensated, with moderate anemia"
+2531,23036,"Cirrhosis and other chronic liver diseases due to hepatitis C, decompensated, with severe anemia"
+2533,23038,"Cirrhosis and other chronic liver diseases due to alcohol, decompensated, with mild anemia"
+2534,23039,"Cirrhosis and other chronic liver diseases due to alcohol, decompensated, with moderate anemia"
+2535,23040,"Cirrhosis and other chronic liver diseases due to alcohol, decompensated, with severe anemia"
+2537,23042,"Cirrhosis and other chronic liver diseases due to other, decompensated, with mild anemia"
+2538,23043,"Cirrhosis and other chronic liver diseases due to other, decompensated, with moderate anemia"
+2539,23044,"Cirrhosis and other chronic liver diseases due to other, decompensated, with severe anemia"
+2541,23046,"Cirrhosis and other chronic liver diseases due to NASH, decompensated, with mild anemia"
+2542,23047,"Cirrhosis and other chronic liver diseases due to NASH, decompensated, with moderate anemia"
+2543,23048,"Cirrhosis and other chronic liver diseases due to NASH, decompensated, with severe anemia"
