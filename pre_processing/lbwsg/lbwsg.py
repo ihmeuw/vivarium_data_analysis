@@ -161,6 +161,16 @@ class LBWSGDistribution:
         self.exposure_dist.rename(columns={'parameter': 'category'}, inplace=True)
         self.cat_df = get_category_data_by_interval()
     
+    def assign_propensities(self, pop):
+        """Assigns propensities relevant to this risk exposure to the population."""
+        propensities = np.random.uniform(size=(len(pop),3))
+        pop['lbwsg_cat_propensity'] = propensities[:,0] # Not actually used yet...
+        pop['ga_propensity'] = propensities[:,1]
+        pop['bw_propensity'] = propensities[:,2]
+        
+    def assign_category_from_propensity(self, pop):
+        pass
+    
     def cat_to_ga_bw(self, cat, p1, p2):
         """Map from category `cat` to bivariate continuous values of birth weight and gestational age.
 
@@ -185,34 +195,22 @@ class LBWSGDistribution:
         bw = self.cat_df.loc[cat, 'bw_start'] + p2 * self.cat_df.loc[cat, 'bw_width']
 
         return ga, bw
-    
+
     def assign_ga_bw_from_propensities_within_cat(self, pop, category_column):
         # Merge pop with cat_df to get function composition pop.index -> category -> category data
         # Unfortunately merging erases the index, so we have to manually reset it to pop.index
         df = pop.reset_index().merge(self.cat_df, left_on=category_column, right_on='category').set_index(pop.index.names)
         pop['gestational_age'] = df['ga_start'] + pop['ga_propensity'] * df['ga_width']
         pop['birthweight'] = df['bw_start'] + pop['bw_propensity'] * df['bw_width']
-    
-    def ga_bw_to_cat(self, ga, bw):
-        """Map from (birth weight, gestational age) to category name.
-
-        Example usage:
-
-        ga_bw_to_cat(31., 3298.)
-
-        Parameters
-        ----------
-        ga : float (gestational age)
-        bw : float (birth weight)
-
-        Results
-        -------
-        Returns cat for (bw,ga) pair
-        """
-
-        t = self.cat_df.query('@bw >= bw_start and @bw < bw_end and @ga >= ga_start and @ga < ga_end')
-        assert len(t) >= 1
-        return t.index[0]
+        # Well, this method was super slow. Like almost 4 times slower.
+#         cat_df = self.cat_df.set_index('category')
+#         def cat_to_ga_bw(cat, p1, p2):
+#             ga = cat_df.loc[cat, 'ga_start'] + p1 * cat_df.loc[cat, 'ga_width']
+#             bw = cat_df.loc[cat, 'bw_start'] + p2 * cat_df.loc[cat, 'bw_width']
+#             return ga, bw
+#         ga, bw = np.vectorize(cat_to_ga_bw)(pop[category_column], pop.ga_propensity, pop.bw_propensity)
+#         pop['gestational_age'] = ga
+#         pop['birthweight'] = bw
 
     def assign_exposure(self, pop):
         """
@@ -221,15 +219,26 @@ class LBWSGDistribution:
         """
         # Based on simulant's age and sex, assign a random LBWSG category from GBD distribution
         # Index levels: location  sex  age_start  age_end   year_start  year_end  parameter
+#         idxs = []
         for (draw, sex, age_start), group in pop.groupby(['draw', 'sex', 'age_start']):
-            cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
-            pop.loc[group.index, 'lbwsg_cat'] = \
+            exposure_mask = (self.exposure_dist.draw==draw) & (self.exposure_dist.sex==sex) & (self.exposure_dist.age_start==age_start)
+            cat_dist = self.exposure_dist.loc[exposure_mask]
+#             cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
+            pop_mask = (pop.sex == sex) & (pop.age_start == age_start) & (pop.index.get_level_values('draw') == draw)
+#             pop.loc[group.index, 'lbwsg_cat'] = \ # This line is really slow!!!
+            pop.loc[pop_mask, 'lbwsg_cat'] = \
                 np.random.choice(cat_dist['category'], size=len(group), p=cat_dist['prevalence'])
         
-        # Assign propensities for ga and bw, and use them to assign a ga and bw within each category
-        ga_bw_propensities = np.random.uniform(size=(len(pop),2))
-        pop['ga_propensity'] = ga_bw_propensities[:,0]
-        pop['bw_propensity'] = ga_bw_propensities[:,1]
+#         enn_male = (pop.age_start == 0) & (pop.sex == 'Male')
+#         enn_female = (pop.age_start == 0) & (pop.sex == 'Female')
+#         lnn_male = (pop.age_start > 0) & (pop.age_start < 1) & (pop.sex == 'Male')
+#         lnn_female = (pop.age_start > 0) & (pop.age_start < 1) & (pop.sex == 'Female')
+        
+#         cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
+#         pop.loc[enn_male, 'lbwsg_cat'] = \
+#                 np.random.choice(cat_dist['category'], size=len(group), p=cat_dist['prevalence'])
+
+        # Use propensities for ga and bw to assign a ga and bw within each category
         self.assign_ga_bw_from_propensities_within_cat(pop, 'lbwsg_cat')
         
 #         ga_bw_propensity = pd.DataFrame(np.random.uniform(size=(len(pop),2)),
@@ -270,9 +279,28 @@ class LBWSGDistribution:
         pop = pop.reset_index()
         pop.loc[~in_bounds, new_bw_col] = pop.loc[~in_bounds, bw_col].values
         return pop.set_index(index_cols)
-        
-        
-        
+
+    def ga_bw_to_cat(self, ga, bw):
+        """Map from (birth weight, gestational age) to category name.
+
+        Example usage:
+
+        ga_bw_to_cat(31., 3298.)
+
+        Parameters
+        ----------
+        ga : float (gestational age)
+        bw : float (birth weight)
+
+        Results
+        -------
+        Returns cat for (bw,ga) pair
+        """
+
+        t = self.cat_df.query('@bw >= bw_start and @bw < bw_end and @ga >= ga_start and @ga < ga_end')
+        assert len(t) >= 1
+        return t.index[0]
+
 
 class LBWSGRiskEffect:
     def __init__(self, rr_data, paf_data=None):
@@ -289,3 +317,4 @@ class LBWSGRiskEffect:
         ).set_index(pop.index.names)
 #         return df
         pop['lbwsg_relative_risk'] = df['relative_risk']
+
