@@ -48,6 +48,10 @@ def find_best_model_versions(search_string, entity='modelable_entity', decomp_st
     )
     return best_model_versions
 
+#####################################
+# CODE FOR DEC 17, 2020 DELIVERABLE #
+#####################################
+
 def pull_dalys_attributable_to_risk_for_locations(location_ids, *risk_factor_names):
     """Calls get_draws to pull all-cause DALYs attributable to the specified risk for the specified locations.
     The call does not specify the age_group_id, so it will pull DALYs for all age groups that contriibute DALYs.
@@ -299,4 +303,395 @@ def summarize_iron_burden_by_subpopulation(risk_dalys=None, location_ids=None, s
         percent_global_iron_dalys_by_subpop_summary.to_csv(save_filepaths[2])
 
     return iron_subpop_dalys_other_summary, iron_subpop_dalys_global_summary, percent_global_iron_dalys_by_subpop_summary
+
+#####################################
+# CODE FOR JAN 22, 2021 DELIVERABLE #
+#####################################
+
+def pull_binary_risk_summary_input_data_for_locations(location_ids, risk_name, hdf_filepath=None):
+    """Calls `get_draws()` to pull input data for data summary of a binary risk.
+    
+    Vitamin A deficiency:
+    Pulls vitamin A deficiency prevalence for the 'Under 5' age group
+    for the location id's in the locations_ids iterable.
+    Note that prevalence data exists for all age groups, but the VAD risk only applies to Under 5,
+    specifically ages 6mo - 5years.
+    In particular, VAD relative risks only exist for age groups 4 and 5 ('Post Neonatal' and '1 to 4').
+    The relative difference between the (weighted) average prvalence in age groups 4 and 5 and the 'Under 5'
+    prevalence is less than 1% (prevalence in 4 and 5 is slightly larger, as expected since the population
+    is slightly smaller).
+    Returned dataframe is 2 rows per location (one for each exposure category).
+    
+    Zinc deficiency:
+    Pulls Zinc deficiency prevalence for the '1 to 4' age group
+    for the location id's in the locations_ids iterable.
+    This is the only age group for which prevalence data exists.
+    Returned dataframe is 2 rows per location (one for each exposure category).
+    """
+    if risk_name=='Vitamin A deficiency':
+        age_group = 'Under 5'
+    elif risk_name=='Zinc deficiency':
+        age_group='1 to 4'
+    else:
+        raise ValueError(f'Unsupported risk name: {risk_name}')
+    
+    risk_name_formatted = risk_name.lower().replace(' ', '_')
+    age_group_formatted = age_group.lower().replace(' ', '_')
+    
+    location_ids=list(location_ids)
+    risk_id=list_ids('rei', risk_name)
+    age_group_id=list_ids('age_group', age_group)
+    sex_id=list_ids('sex', 'Male', 'Female', 'Both')
+    gbd_round_id=list_ids('gbd_round', '2019')
+    
+#     metadata = 
+    
+    # Pulls prevalence for specified age group - 2 rows per location (cat1, cat2) per sex id
+    prevalence = get_draws(
+        gbd_id_type='rei_id',
+        gbd_id=risk_id,
+        source='exposure',
+        location_id=location_ids,
+        year_id=2019,
+        age_group_id=age_group_id,
+        sex_id=sex_id,
+        gbd_round_id=gbd_round_id,
+        status='best',
+        decomp_step='step4',
+    )
+    if hdf_filepath is not None:
+        prevalence.to_hdf(hdf_filepath, f'{risk_name_formatted}/prevalence_among_{age_group_formatted}')
+    
+    # Pulls population for specified age group - 1 row per location per sex id
+    population = get_population(
+        age_group_id=age_group_id,
+        sex_id=sex_id,
+        location_id=location_ids,
+        year_id=2019,
+        gbd_round_id=gbd_round_id,
+        decomp_step='step4',
+        with_ui=True,
+    )
+    if hdf_filepath is not None:
+        population.to_hdf(hdf_filepath, f'{risk_name_formatted}/population_{age_group_formatted}')
+    
+    # Pulls all-cause DALY burden (number and percent) for all age groups
+    # Vitamin A: 92 rows per location (23 age groups x 2 sexes x 2 metrics)
+    # Zinc: 4 rows per location (1 age group x 2 sexes x 2 metrics)
+    daly_burden = get_draws(
+        gbd_id_type=['rei_id', 'cause_id'], # Types must match gbd_id's
+        gbd_id=[risk_id, list_ids('cause', 'All causes')],
+        source='burdenator',
+        measure_id=find_ids('measure', 'DALYs'),
+        metric_id=None, # Only available metrics are Number and Percent
+        location_id=list(location_ids),
+        year_id=2019,
+        sex_id=None, # Sex aggregates not available
+        gbd_round_id=gbd_round_id,
+        status='best',
+        decomp_step='step5',
+    )
+    if hdf_filepath is not None:
+        daly_burden.to_hdf(hdf_filepath, f'{risk_name_formatted}/daly_burden')
+
+    BinaryRiskSummaryData = namedtuple('BinaryRiskSummaryInputData', 'prevalence, population, daly_burden')
+    return BinaryRiskSummaryInputData(prevalence, population, daly_burden)
+
+def preprocess_binary_risk_summary_input_data(risk_data, risk_name):
+    """Processes raw Vitamin A deficiency or Zinc deficiency data from GBD pulled by
+    `pull_binary_risk_summary_input_data_for_locations` for inputting into
+    `get_binary_outcome_data_summary`.
+    """
+    prevalence, population, daly_burden = risk_data
+
+    if risk_name=='Vitamin A deficiency':
+        # Need to sum DALYs over all Under-5 age groups
+        age_group='Under 5'
+        age_group_ids=list_ids('age_group',
+                               'Early Neonatal', 'Late Neonatal','Post Neonatal', '1 to 4')
+    elif risk_name=='Zinc deficiency':
+        # Only one age group exists for Zinc deficiency data
+        age_group='1 to 4'
+        age_group_ids=[list_ids('age_group', age_group)]
+    else:
+        raise ValueError(f"Unsupported risk: {risk_name}")
+
+    sex_id=list_ids('sex', 'Both')
+    number_id=list_ids('metric', 'Number')
+    percent_id=list_ids('metric', 'Percent')
+    
+    # Filter prevalence to the 'exposed' category (get rid of, 'cat2', the TMREL)
+    prevalence = prevalence.query("sex_id == @sex_id and parameter == 'cat1'")
+    # Filter population to the correct sex id(s)
+    population = population.query("sex_id == @sex_id")
+    # Sum DALYs over sexes and age groups if necessary, and record the age group name
+    daly_count = (daly_burden
+                  .query("metric_id == @number_id and age_group_id in @age_group_ids")
+                  .pipe(aggregate_draws_over_columns, ['sex_id', 'age_group_id'])
+                  .reset_index()
+                  .assign(age_group=age_group)
+                 )
+    # I think this is wrong because it doesn't do a weighted average over sexes
+#     daly_percent = (zinc_data.daly_burden
+#                     .query("metric_id == @percent_id")
+#                     .pipe(aggregate_draws_over_columns, ['sex_id'])
+#                     .reset_index()
+#                    )
+    BinaryRiskSummaryPreprocessedData = namedtuple(
+        'BinaryRiskSummaryPreprocessedData', 'prevalence, population, daly_count, daly_rate, daly_percent')
+    return BinaryRiskSummaryPreprocessedData(prevalence, population, daly_count, daly_rate=None, daly_percent=None)
+
+def pull_neural_tube_defects_summary_input_data_for_locations(location_ids, hdf_filepath=None):
+    """Calls `get_draws()` to pull input data for the data summary for Neural tube defects.
+    Pull Neural tube defects incidence at birth (i.e. birth prevalence)
+    for the location id's in the locations_ids iterable.
+    'Birth' is the only age group for which incidence data exists.
+    Returned dataframe is 1 row per location.
+    """
+    cause_name='Neural tube defects'
+    location_ids=list(location_ids)
+    cause_id=list_ids('cause', cause_name)
+    gbd_round_id=list_ids('gbd_round', '2019')
+    sex_id=list_ids('sex', 'Male', 'Female', 'Both')
+#     age_group_id=list_ids('age_group', 'Birth', 'Under 5')
+#     birth_age_group_id=list_ids('age_group', 'Birth')
+#     under_5_age_group_id=list_ids('age_group', 'Under 5')
+
+    key_prefix='data_summary'
+    cause_name_formatted = cause_name.lower().replace(' ', '_')
+#     age_group_formatted = age_group.lower().replace(' ', '_')
+    
+    # Pulls birth prevalence for neural tube defects
+    prevalence = get_draws(
+        gbd_id_type='cause_id',
+        gbd_id=cause_id,
+        source='como',
+        location_id=list(location_ids),
+        year_id=2019,
+#         age_group_id=list_ids('age_group', 'Birth'), # Passing Birth age group throws an error
+        sex_id=sex_id,
+        measure_id=list_ids('measure', 'Incidence'), # Birth is only age group for which there is incidence
+        gbd_round_id=list_ids('gbd_round', '2019'),
+        status='best',
+        decomp_step='step5',
+    )
+    if hdf_filepath is not None:
+        prevalence.to_hdf(hdf_filepath, f'{key_prefix}/{cause_name_formatted}/prevalence')
+
+    # Pulls population for Birth and Under 5 age groups - 2 row per location per sex id
+    population = get_population(
+        age_group_id=list_ids('age_group', 'Birth', 'Under 5'),
+        sex_id=sex_id,
+        location_id=location_ids,
+        year_id=2019,
+        gbd_round_id=gbd_round_id,
+        decomp_step='step4',
+        with_ui=True,
+    )
+    if hdf_filepath is not None:
+        population.to_hdf(hdf_filepath, f'{key_prefix}/{cause_name_formatted}/population')
+
+    # Pulls DALY count and percent for 
+    daly_burden = get_draws(
+        gbd_id_type='cause_id',
+        gbd_id=cause_id,
+        source='dalynator',
+        measure_id=find_ids('measure', 'DALYs'),
+        metric_id=None, # Returns Number, Percent, and Rate
+        location_id=list(location_ids),
+        year_id=2019,
+        sex_id=sex_id,
+        age_group_id=list_ids('age_group', 'Under 5'),
+        gbd_round_id=list_ids('gbd_round', '2019'),
+        status='best',
+        decomp_step='step5',
+    )
+    if hdf_filepath is not None:
+        daly_burden.to_hdf(hdf_filepath, f'{key_prefix}/{cause_name_formatted}/daly_burden')
+
+    return prevalence, population, daly_burden
+
+def preprocess_neural_tube_defects_data(ntd_data):
+    """Processes raw GBD data from `pull_neural_tube_defects_summary_input_data_for_locations`
+    to pass into `get_binary_outcome_data_summary`.
+    """
+    prevalence, population, daly_burden = ntd_data
+    
+    birth_age_group_id=list_ids('age_group', 'Birth')
+    under_5_age_group_id=list_ids('age_group', 'Under 5')
+    
+    sex_id=list_ids('sex', 'Both')
+    number_id=list_ids('metric', 'Number')
+    percent_id=list_ids('metric', 'Percent')
+    rate_id=list_ids('metric', 'Rate')
+    
+    # Filter prevalence to Birth prevalence
+    birth_prevalence = prevalence.query("sex_id == @sex_id and age_group_id == @birth_age_group_id")
+    birth_population = population.query("sex_id == @sex_id and age_group_id == @birth_age_group_id")
+    # Filter DALYs to Under-5 age group, and record the age group name
+    dalys = (daly_burden
+             .query("sex_id == @sex_id and age_group_id == @under_5_age_group_id")
+             .assign(age_group='Under 5')
+            )
+    daly_count = dalys.query("metric_id == @number_id")
+    daly_rate = dalys.query("metric_id == @rate_id")
+    daly_percent = dalys.query("metric_id == @percent_id")
+    BinaryCauseSummaryPreprocessedData = namedtuple(
+        'BinaryCauseSummaryPreprocessedData','prevalence, population, daly_count, daly_rate, daly_percent')
+    return BinaryCauseSummaryPreprocessedData(birth_prevalence, birth_population, daly_count, daly_rate, daly_percent)
+
+# Main function to create data summaries
+
+def get_binary_outcome_data_summary(preprocessed_data, outcome_name, location_ids=None, save_filepath=None):
+    """Creates a dataframe summarizing GBD data for the specified binary outcome.
+    Namely, the summary has columns for prevalence, number with outcome, DALYs attributable to outcome,
+    and DALYs attributable to outcome per 100,000 person-years, in appropriate age groups.
+    Currently works for Vitamin A deficiency, Zinc deficiency, and Neural tube defects.
+    """
+    prevalence, population, daly_count, daly_rate, daly_percent = preprocessed_data
+    
+    if location_ids is None:
+        location_ids = list(population.location_id.unique())
+    
+    draw_cols = [f'draw_{i}' for i in range(1000)]
+    index_cols = ['location_id']
+
+    def make_column(df, colname):
+        """Converts the draw data in a dataframe returned by get_draws into a pandas Series
+        indexed by location_id and draw, with the specified name. The data is assumed to
+        contain a unique gbd entity, age group, sex, measure, and metric.
+        """
+        column = (df
+                  .query(f"location_id in {location_ids}")
+                  .set_index(index_cols)[draw_cols]
+                  .rename_axis(columns='draw')
+                  .stack()
+                  .rename(colname)
+                 )
+        return column
+
+    # Create prevalence column
+    prevalence_age_group = ids_to_names('age_group', *prevalence.age_group_id.unique())
+    assert len(prevalence_age_group) == 1
+    prevalence = make_column(prevalence, f'Prevalence of {outcome_name} in age group {prevalence_age_group.iloc[0]}')
+
+    # Re-index the population to match other columns for calculations
+    population = (population
+                  .query("location_id in @location_ids")
+                  .set_index(index_cols)['population']
+                 )
+    
+    # Create column for number with the outcome
+    number_with_outcome = (prevalence * population).rename(
+        f'Number in age group {prevalence_age_group.iloc[0]} with {outcome_name}')
+
+    # Create DALY count column
+    daly_age_group = daly_count.age_group.unique()[0] # Age group column was added in preprocessing
+    daly_count = make_column(daly_count, f'DALYs attributable to {outcome_name} in age group {daly_age_group}')
+    
+    # Create DALY rate column
+    daly_multiplier = 100_000
+    daly_rate_colname = (f'DALYs attributable to {outcome_name} '
+                         f'per {daly_multiplier:,} person-years in age group {daly_age_group}'
+                        )
+    if daly_rate is None: # For risks, we can't pull DALY rate from burdenator, so we need to compute it
+        daly_rate = (daly_count / population).rename(daly_rate_colname) * daly_multiplier
+    else: # For causes, DALY rate was pulled from dalynator
+        daly_rate = make_column(daly_rate, daly_rate_colname) * daly_multiplier
+        
+#     daly_percent = make_column(daly_percent, 'Percent of total DALYs in age group {daly_age_group} attributable {outcome_name}')
+
+    # Concatenate columns, summarize draws, and add location names
+    data_summary = pd.concat([prevalence, number_with_outcome, daly_count, daly_rate], axis=1)
+    locations = ids_to_names('location', *location_ids)
+
+    data_summary = (data_summary
+                    .groupby(index_cols)
+                    .pipe(aggregate_mean_lower_upper)
+                    .pipe(flatten_column_levels) # Flatten the multi-index to avoid messing it up when joining
+                    .join(locations)
+                    .sort_values('location_name')
+                    .set_index('location_name', append=True)
+                    .pipe(move_global_to_end)
+                    .pipe(expand_column_levels, names=['measure', 'estimate']) # Re-expand flattened multi-index
+                   )
+    if save_filepath is not None:
+        data_summary.to_csv(save_filepath)
+    return data_summary
+
+# Helper functions for above data summary function
+
+def aggregate_mean_lower_upper(df_or_groupby):
+    """"""
+    def lower(x): return x.quantile(0.025)
+    def upper(x): return x.quantile(0.975)
+    return df_or_groupby.agg(['mean', lower, upper])
+
+def move_global_to_end(df):
+    """"""
+    return pd.concat(split_global_from_other_locations(df))
+
+def flatten_column_levels(df):
+    df.columns = df.columns.to_flat_index()
+    return df
+
+def expand_column_levels(df, sortorder=None, names=None):
+    df.columns = pd.MultiIndex.from_tuples(df.columns, sortorder=sortorder, names=names)
+    return df
+
+# Function to format summarized data nicely for a table in Word or PowerPoint
+
+def format_data_summary(data_summary,
+                        prevalence_multiplier=100,
+                        prevalence_decimals=1,
+                        prevalent_cases_units=1000,
+                        daly_count_units=1,
+                        daly_count_decimals=0,
+                        daly_rate_multiplier=1,
+                        sep='\n',
+                        save_filename=None):
+    """Formats a data summary produced by `get_binary_outcome_data_summary` to combine
+    each triple of mean, lower, upper columns into a single column of the form "mean (lower, upper)",
+    with options to change the units and number of decimal places for each measure.
+    """
+    def print_mean_lower_upper(mean, lower, upper, number_format):
+        return f"{mean:{number_format}}{sep}({lower:{number_format}}, {upper:{number_format}})"
+    
+    cols = []
+    for measure in data_summary.columns.get_level_values('measure').unique():
+        df = data_summary[measure]
+        if measure.startswith('Prevalence'):
+            df *= prevalence_multiplier
+            number_format = f'.{prevalence_decimals}f'
+            suffix = f" (per {prevalence_multiplier})"
+        elif measure.startswith('Number'):
+            df /= prevalent_cases_units
+            number_format = ',.0f'
+            suffix = f" ({prevalent_cases_units}s)" if prevalent_cases_units>1 else ''
+#         elif measure.startswith('Mean'):
+#             number_format = '.1f'
+#             suffix = ''
+        elif measure.startswith('DALYs'):
+            if 'person-year' in measure:
+                df *= daly_rate_multiplier
+                number_format = f',.0f'
+                suffix = f" (x {daly_rate_multiplier:,})" if daly_rate_multiplier !=1 else ''
+            else:
+                df /= daly_count_units
+                number_format = f',.{daly_count_decimals}f'
+                suffix = f" ({daly_count_units}s)" if daly_count_units>1 else ''
+        else:
+            number_format = ',.0f'
+            suffix = ''
+        col = (df
+               .apply(lambda row: print_mean_lower_upper(row['mean'], row['lower'], row['upper'], number_format)
+                      , axis=1)
+               .rename(measure + suffix)
+              )
+        cols.append(col)
+        
+    formatted_summary = pd.concat(cols, axis=1)
+    if save_filename is not None:
+        formatted_summary.to_csv(save_filename)
+    return formatted_summary
 
