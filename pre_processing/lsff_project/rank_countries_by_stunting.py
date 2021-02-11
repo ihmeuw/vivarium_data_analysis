@@ -40,14 +40,16 @@ def add_location_ids_to_orig_countries(orig_countries, location_ids):
     # so search for a matching name to get the correct id's and names.
     # (I pre-verified that these searches give exactly one result)
     orig_countries.loc[orig_countries.country=='Tanzania', ['location_id', 'location_name']]=(
-        search_id_table(locids, 'Tanzania').values # .values avoids attempting to match index, which fails
+        search_id_table(locids, 'Tanzania').iloc[0].array # fails without .array, perhaps because df index doesn't match Series name
     )
     orig_countries.loc[orig_countries.country=="Cote d'Ivoire", ['location_id', 'location_name']]=(
-        search_id_table(locids, 'Ivoire').values # .values avoids attempting to match index, which fails
+        search_id_table(locids, 'Ivoire').iloc[0].array # fails without .array, perhaps because df index doesn't match Series name
     )
     # Filter out duplicate country names (e.g. Sudan) by inner joining with correct id's
     location_ids=pd.Series(location_ids, name='location_id')
     orig_countries = orig_countries.merge(location_ids, how='inner')
+     # Reset dtype to int because NaN's upcasted to float
+    orig_countries['location_id'] = orig_countries['location_id'].astype(int)
     return orig_countries
 
 def get_locations_for_stunting_prevalence(category='admin0'):
@@ -70,7 +72,6 @@ def pull_stunting_prevalence_for_locations(location_ids):
         'rei_id',
         gbd_id=list_ids('rei', 'Child stunting'),
         source='exposure',
-        measure_id=list_ids('measure', 'prevalence'),
         location_id=list(location_ids),
         year_id=2019,
         age_group_id=list_ids('age_group', 'Under 5'),
