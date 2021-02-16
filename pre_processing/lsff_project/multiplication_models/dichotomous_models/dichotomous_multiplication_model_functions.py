@@ -23,24 +23,23 @@ def generate_coverage_parameter_draws(df):
     return data_frame
 
 
-def generate_overall_coverage_rates(nutrient, vehicle, coverage_levels, years):
+def generate_overall_coverage_rates(nutrient, vehicle, coverage_levels, years, location_ids):
     """This function generates baseline and counterfactual coverage rates of fortification for a specified
     nutrient and vehicle pair. The baseline coverage rates are assumed to remain constant from 2021 to 2025.
     The alternative coverage rates are assumed to jump from the baseline rate in 2021 to either 20/50/80 percent
     of the difference between the baseline rate (proportion of population eating fortified vehicle) and the
     current maximum coverage potential (proportion of population eating industrially produced vehicle) in 2022
     and then remains constant at that level through 2025."""
-
     data = pd.read_csv(
         '/ihme/homes/alibow/notebooks/vivarium_data_analysis/pre_processing/lsff_project/data_prep/outputs/LSFF_extraction_clean_data_rich_locations_01_11_2021.csv')
-
+    data = data.loc[data.location_id.isin(location_ids)]
     # the following is a transformation for a potential data issue and should be removed when resolved
     data['value_mean'] = data['value_mean'].replace(100, 100 - 0.00001 * 2)
     data['value_025_percentile'] = data['value_025_percentile'].replace(100, 100 - 0.00001 * 3)
     data['value_975_percentile'] = data['value_975_percentile'].replace(100, 100 - 0.00001)
 
     data = data.loc[data.vehicle == vehicle].loc[data.nutrient.isin([nutrient, 'na'])]
-    data['value_std'] = (data.value_975_percentile - data.value_025_percentile) / 2 / 1.96
+    data['value_std'] = (data.value_975_percentile - data.value_mean) / 1.96
     data['a'] = (0 - data.value_mean) / data.value_std
     data['b'] = (100 - data.value_mean) / data.value_std
 
@@ -242,12 +241,13 @@ def pull_dalys(cause_ids, nonfatal_cause_ids, location_ids, ages, sexes, index_c
         decomp_step='step5',
     ).set_index(index_cols + ['cause_id']).replace(np.nan, 0)
     ylls = ylls.drop(columns=[c for c in ylls.columns if 'draw' not in c])
-    for nf in nonfatal_cause_ids:
-        nonfatal = ylls.groupby(index_cols).sum()
-        nonfatal['cause_id'] = nf
-        for i in list(range(0, 1000)):
-            nonfatal[f'draw_{i}'] = 0
-    ylls = pd.concat([ylls.reset_index(), nonfatal.reset_index()]).set_index(index_cols + ['cause_id'])
+    if len(nonfatal_cause_ids) > 0:
+        for nf in nonfatal_cause_ids:
+            nonfatal = ylls.groupby(index_cols).sum()
+            nonfatal['cause_id'] = nf
+            for i in list(range(0, 1000)):
+                nonfatal[f'draw_{i}'] = 0
+        ylls = pd.concat([ylls.reset_index(), nonfatal.reset_index()]).set_index(index_cols + ['cause_id'])
 
     dalys = ylls + ylds
     return dalys
@@ -287,7 +287,8 @@ def duplicate_over_simulation_years(df, years):
         temp = data.copy()
         temp['year'] = year
         data_years = pd.concat([data_years, temp], ignore_index=True)
-    data_years = data_years.set_index(['location_id', 'sex_id', 'age_group_id', 'year', 'cause_id']).sort_index()
+    data_years = data_years.set_index(['location_id', 'sex_id', 'age_group_id', 'year'] +
+                                      [c for c in data_years.columns if c == 'cause_id']).sort_index()
     return data_years
 
 
