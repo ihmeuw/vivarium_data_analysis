@@ -1,0 +1,9 @@
+location_name,value_description,vehicle,nutrient,notes
+India,percent of pop eating fortified vehicle,wheat flour,vitamin a,"we have no data, and GFDx says fort is voluntary. Setting to zero."
+India,percent of pop eating fortified vehicle,wheat flour,zinc,"we have no data, and GFDx says fort is voluntary. Setting to zero."
+Ethiopia,percent of pop eating fortified vehicle,wheat flour,zinc,"we have no data, and GFDx says fort is voluntary. Setting to zero."
+Ethiopia,percent of pop eating fortified vehicle,wheat flour,iron,"we have no data, and GFDx says fort is voluntary. Setting to zero."
+Ethiopia,percent of population eating industrially produced vehicle,wheat flour,NA,"the source didn't provide an upper/lower; mean was 27, assumed (17,37)"
+Ethiopia,percent of population eating industrially produced vehicle,wheat flour,NA,"the source didn't provide an upper/lower; mean was 20 assumed (10,30)"
+Ethiopia,percent of population eating industrially produced vehicle,oil,NA,"the source didn't provide an upper/lower; mean was 70, assumed (60,80)"
+Nigeria,percent of population eating industrially produced vehicle,wheat flour,NA,population-weighted kano and lagos
