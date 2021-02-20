@@ -22,8 +22,6 @@ if importlib.util.find_spec('db_queries') is not None:
 # Note: In GBD 2019, this category is `cat124`, meid=20224.
 MISSING_CATEGORY_GBD_2017 = {'cat212': 'Birth prevalence - [37, 38) wks, [1000, 1500) g'}
 
-CATEGORY_MEIDS_GBD_2019 = [10755, 10761, 10763, 10764, 10767, 10768, 10770, 10772, 10773, 10774, 10775, 10776, 10777, 10778, 10779, 10780, 10781, 10782, 10783, 10784, 10785, 10786, 10787, 10788, 10789, 10790, 10791, 10792, 10793, 10794, 10795, 10796, 10797, 10798, 10799, 10800, 10801, 10802, 10803, 10804, 10805, 10806, 10807, 10808, 10809, 20203, 20204, 20205, 20209, 20210, 20211, 20214, 20215, 20221, 20224, 20227, 20228, 20232]
-
 # The dictionary below was created with the following code:
 # CATEGORY_TO_MEID_GBD_2019 = (
 #     lbwsg_exposure_nigeria_birth_male
@@ -97,67 +95,6 @@ CATEGORY_TO_MEID_GBD_2019 = {
  'cat124': 20224
 }
 
-MEID_TO_CATEGORY_GBD_2019 = {
- 10755: 'cat2',
- 10761: 'cat8',
- 10763: 'cat10',
- 10764: 'cat11',
- 10767: 'cat14',
- 10768: 'cat15',
- 10770: 'cat17',
- 10772: 'cat19',
- 10773: 'cat20',
- 10774: 'cat21',
- 10775: 'cat22',
- 10776: 'cat23',
- 10777: 'cat24',
- 10778: 'cat25',
- 10779: 'cat26',
- 10780: 'cat27',
- 10781: 'cat28',
- 10782: 'cat29',
- 10783: 'cat30',
- 10784: 'cat31',
- 10785: 'cat32',
- 10786: 'cat33',
- 10787: 'cat34',
- 10788: 'cat35',
- 10789: 'cat36',
- 10790: 'cat37',
- 10791: 'cat38',
- 10792: 'cat39',
- 10793: 'cat40',
- 10794: 'cat41',
- 10795: 'cat42',
- 10796: 'cat43',
- 10797: 'cat44',
- 10798: 'cat45',
- 10799: 'cat46',
- 10800: 'cat47',
- 10801: 'cat48',
- 10802: 'cat49',
- 10803: 'cat50',
- 10804: 'cat51',
- 10805: 'cat52',
- 10806: 'cat53',
- 10807: 'cat54',
- 10808: 'cat55',
- 10809: 'cat56',
- 20203: 'cat80',
- 20204: 'cat81',
- 20205: 'cat82',
- 20209: 'cat88',
- 20210: 'cat89',
- 20211: 'cat90',
- 20214: 'cat95',
- 20215: 'cat96',
- 20221: 'cat106',
- 20224: 'cat124',
- 20227: 'cat116',
- 20228: 'cat117',
- 20232: 'cat123'
-}
-
 def read_lbwsg_data_by_draw_from_gbd2017_artifact(artifact_path, measure, draw, rename=None):
     """
     Reads one draw of LBWSG data from an artifact.
@@ -176,25 +113,6 @@ def read_lbwsg_data_by_draw_from_gbd2017_artifact(artifact_path, measure, draw, 
         draw.rename(rename)
     data = pd.concat([index, draw], axis=1)
     return data
-
-def read_lbwsg_data_from_gbd2017_artifact1(artifact_path, measure, *filter_terms, draws='all'):
-    query_string = ' and '.join(filter_terms)
-    if draws=='all':
-        draws = range(1000)
-    draw_cols = [f'draw_{draw}' for draw in draws]
-    draw_data_dfs = []
-    
-    for draw in draws:
-        draw_data = read_lbwsg_data_by_draw(artifact_path, measure, draw)
-        if query_string != '':
-            draw_data = draw_data.query(query_string)
-        index_cols = draw_data.columns.difference(draw_cols)
-        draw_data = draw_data.set_index(index_cols.to_list())
-#         data = pd.concat([data, draw_data], axis=1)
-        draw_data_dfs.append(draw_data)
-        
-#     return data
-    return pd.concat(draw_data_dfs, axis=1, copy=False)
 
 def read_lbwsg_data_from_gbd2017_artifact(artifact_path, measure, *filter_terms, draws=None):
     """
@@ -248,59 +166,6 @@ def get_intervals_from_name(name: str) -> Tuple[pd.Interval, pd.Interval]:
     return (pd.Interval(numbers_only[0], numbers_only[1], closed='left'),
             pd.Interval(numbers_only[2], numbers_only[3], closed='left'))
 
-def get_lbwsg_categories_by_interval(include_missing=True):
-    """
-    Return a pandas Series indexed by (gestational age interval, birth weight interval),
-    mapping to the corresponding LBWSG category.
-    """
-    category_dict = gbd_mapping.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
-    if include_missing:
-        category_dict.update(MISSING_CATEGORY_GBD_2017)
-    cats = (pd.DataFrame.from_dict(category_dict, orient='index')
-            .reset_index()
-            .rename(columns={'index': 'cat', 0: 'name'}))
-    idx = pd.MultiIndex.from_tuples(cats.name.apply(get_intervals_from_name),
-                                    names=['gestation_time', 'birth_weight'])
-    cats = cats['cat']
-    cats.index = idx
-    return cats
-
-def get_ga_bw_by_category(include_missing=False):
-    """
-    Returns a dataframe indexed by LBWSG category, with four columns describing the intervals for that category:
-    ga_start, ga_end, bw_start, bw_end
-    """
-    cats = gbd_mapping.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
-    if include_missing:
-        cats.update(MISSING_CATEGORY_GBD_2017)
-    cats = pd.Series(cats)
-
-    # Example string to extract from: 'Birth prevalence - [0, 24) wks, [0, 500) g'
-    # extraction_regex = r'.*\[(?P<ga_start>\d+), (?P<ga_end>\d+).*\[(?P<bw_start>\d+), (?P<bw_end>\d+).*' # this also works
-    extraction_regex = r'Birth prevalence - \[(?P<ga_start>\d+), (?P<ga_end>\d+)\) wks, \[(?P<bw_start>\d+), (?P<bw_end>\d+)\) g'
-    cats = cats.str.extract(extraction_regex).astype(int,copy=False)
-    cats.index.rename('category', inplace=True)
-    return cats
-
-def get_category_data_by_interval(include_missing=False):
-    """
-    Returns a dataframe indexed by the bw and ga intervals, with columns for data about the
-    corresponding LBWSG category.
-    """
-    cat_df = get_ga_bw_by_category(include_missing).reset_index()
-    
-    def make_interval(left,right):
-        return pd.Interval(left=left, right=right, closed='left')
-    
-    cat_df['ga'] = np.vectorize(make_interval)(cat_df.ga_start, cat_df.ga_end)
-    cat_df['bw'] = np.vectorize(make_interval)(cat_df.bw_start, cat_df.bw_end)
-    
-#     cat_df['ga_width'] = cat_df['ga_end'] - cat_df['ga_start']
-    cat_df['ga_width'] = cat_df.ga.apply(lambda interval: interval.length)
-    cat_df['bw_width'] = cat_df['bw_end'] - cat_df['bw_start']
-    
-    return cat_df.set_index(['ga','bw'])
-
 def get_category_descriptions(source='gbd_mapping'):
     # The "description" is the modelable entity name for the category
     if source=='get_ids':
@@ -315,7 +180,7 @@ def get_category_descriptions(source='gbd_mapping'):
     cats = (pd.Series(CATEGORY_TO_MEID_GBD_2019, name='modelable_entity_id')
             .rename_axis('category')
             .reset_index()
-            .merge(descriptions) # on 'modelable_entity_id' if source=='get_ids', on 'category' if source=='gbd_mapping'
+            .merge(descriptions) # merge on 'modelable_entity_id' if source=='get_ids', on 'category' if source=='gbd_mapping'
            )
     return cats
 
@@ -339,6 +204,12 @@ def get_category_data(source='gbd_mapping'):
     cat_df['bw_width'] = cat_df['bw_end'] - cat_df['bw_start']
     return cat_df
 
+def merge_keep_index(df, *args, **kwargs):
+    """Performs df.merge(*args, **kwargs), but keeps the index from df in the result instead of resetting it.
+    Note that this may result in duplicate or missing index entries, depending on the results of the merge.
+    """
+    return df.reset_index().merge(*args, **kwargs).set_index(df.index.names)
+
 class LBWSGDistribution:
     """
     Class to assign and adjust birthweights and gestational ages of a simulated population.
@@ -346,7 +217,11 @@ class LBWSGDistribution:
     def __init__(self, exposure_data):
         self.exposure_dist = convert_draws_to_long_form(exposure_data, name='prevalence')
         self.exposure_dist.rename(columns={'parameter': 'category'}, inplace=True)
-        self.cat_df = get_category_data_by_interval()
+#         self.cat_df = get_category_data_by_interval()
+        cat_df = get_category_data()
+        cat_data_cols = ['ga_start', 'ga_end', 'bw_start', 'bw_end', 'ga_width', 'bw_width']
+        self.interval_data_by_category = cat_df.set_index('category')[[cat_data_cols]]
+        self.categories_by_interval = cat_df.set_index(['ga','bw'])['category']
     
     def assign_propensities(self, pop):
         """Assigns propensities relevant to this risk exposure to the population."""
@@ -357,47 +232,15 @@ class LBWSGDistribution:
         
     def assign_category_from_propensity(self, pop):
         pass
-    
-    def cat_to_ga_bw(self, cat, p1, p2):
-        """Map from category `cat` to bivariate continuous values of birth weight and gestational age.
-
-        Example usage:
-
-        cat_df = get_ga_bw_by_category()
-        cat = np.random.choice(cat_df.index, size=None)
-        cat, cat_to_ga_bw(cat, np.random.rand(), np.random.rand())
-
-        Parameters
-        ----------
-        cat : str or list-like of strings, one of the 58 values in index of cat_df
-        p1 : float or list-like of floats, propensity between 0 and 1
-        p2 : float or list-like of floats, propensity between 0 and 1
-
-        Results
-        -------
-        Returns tuple of (gestational age, birth weight)
-        """
-
-        ga = self.cat_df.loc[cat, 'ga_start'] + p1 * self.cat_df.loc[cat, 'ga_width']
-        bw = self.cat_df.loc[cat, 'bw_start'] + p2 * self.cat_df.loc[cat, 'bw_width']
-
-        return ga, bw
 
     def assign_ga_bw_from_propensities_within_cat(self, pop, category_column):
         # Merge pop with cat_df to get function composition pop.index -> category -> category data
         # Unfortunately merging erases the index, so we have to manually reset it to pop.index
-        df = pop.reset_index().merge(self.cat_df, left_on=category_column, right_on='category').set_index(pop.index.names)
+#         df = pop.reset_index().merge(
+#             self.interval_data_by_category, left_on=category_column, right_on='category').set_index(pop.index.names)
+        df = merge_keep_index(pop, self.interval_data_by_category, left_on=category_column, right_on='category')
         pop['gestational_age'] = df['ga_start'] + pop['ga_propensity'] * df['ga_width']
         pop['birthweight'] = df['bw_start'] + pop['bw_propensity'] * df['bw_width']
-        # Well, this method was super slow. Like almost 4 times slower.
-#         cat_df = self.cat_df.set_index('category')
-#         def cat_to_ga_bw(cat, p1, p2):
-#             ga = cat_df.loc[cat, 'ga_start'] + p1 * cat_df.loc[cat, 'ga_width']
-#             bw = cat_df.loc[cat, 'bw_start'] + p2 * cat_df.loc[cat, 'bw_width']
-#             return ga, bw
-#         ga, bw = np.vectorize(cat_to_ga_bw)(pop[category_column], pop.ga_propensity, pop.bw_propensity)
-#         pop['gestational_age'] = ga
-#         pop['birthweight'] = bw
 
     def assign_exposure(self, pop):
         """
@@ -434,6 +277,12 @@ class LBWSGDistribution:
 #         self.assign_ga_bw_from_propensities_within_cat(ga_bw_propensity, 'category')
 #         # Now need to copy columns to pop...
 
+#     def assign_category_for_ga_bw(self, pop, bw_col, ga_col, cat_col):
+
+#         pop_copy = pop.reset_index().set_index([ga_col, bw_col])
+#         cats = self.categories_by_interval[pop_copy.index]
+#         in_bounds = self.categories_by_interval.index.get_indexer(pop_copy.index) != -1
+
     def apply_birthweight_shift(self, pop, shift, bw_col='birthweight', ga_col='gestational_age'):
         """
         Applies the specified birthweight shift to the population, and finds the new LBWSG category.
@@ -454,40 +303,53 @@ class LBWSGDistribution:
         # TODO: Factor out some of the below code into a new function,
         # e.g. assign_category_for_ga_bw(pop, bw_col, ga_col, cat_col)
         # TODO: Also, return additional columns, e.g. the original category, and whether the category has changed
-        # Categories should be compute using the proposed function above, rather than relying on what's already
+        # Categories should be computed using the proposed function above, rather than relying on what's already
         # stored in pop
         pop = pop.reset_index().set_index([ga_col, new_bw_col])
-        in_bounds = self.cat_df.index.get_indexer(pop.index) != -1
+        in_bounds = self.categories_by_interval.index.get_indexer(pop.index) != -1
         pop['valid_shift'] = in_bounds
-        pop.loc[in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[in_bounds].index, 'category'].array
+        pop.loc[in_bounds, 'new_lbwsg_cat'] = self.categories_by_interval.loc[pop.loc[in_bounds].index, 'category'].array
         pop = pop.reset_index(new_bw_col).set_index(bw_col, append=True)
-        pop.loc[~in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[~in_bounds].index, 'category'].array
+        pop.loc[~in_bounds, 'new_lbwsg_cat'] = self.categories_by_interval.loc[pop.loc[~in_bounds].index, 'category'].array
 #         pop.loc[~in_bounds, 'new_lbwsg_cat'] = pop.loc[~in_bounds, 'lbwsg_cat']
         pop = pop.reset_index()
         pop.loc[~in_bounds, new_bw_col] = pop.loc[~in_bounds, bw_col].values
         return pop.set_index(index_cols)
 
-    def ga_bw_to_cat(self, ga, bw):
-        """Map from (birth weight, gestational age) to category name.
+    def apply_birthweight_shift2(self, pop, shift, bw_col='birthweight', ga_col='gestational_age'):
+#         index_cols = pop.index.names
+        pop = pop[[ga_col, bw_col]].copy()
+        # Assign existing categories
+        pop['lbwsg_cat'] = self.get_category_for_bw_ga(pop, bw_col, ga_col)
+#         pop['lbwsg_cat'] = self._get_categories_for_indexer(self._get_category_indexer(pop, bw_col, ga_col))
+        # Prepend 'shifted', so that the original column name stays the same.
+        # (Or allow passing a prefix or suffix?)
+        shifted_bw_col = f'shifted_{bw_col}'
+        # Apply the shift in the new column
+        pop.loc[shifted_bw_col] = pop[bw_col] + shift
+        # Get integer index of category based on ga and shifted bw
+        idx = self._get_category_indexer(pop, shifted_bw_col, ga_col)
+        pop['valid_shift'] = in_bounds = idx != -1
+        # Reset out-of-bounds birthweights back to their original values
+        pop.loc[~in_bounds, shifted_bw_col] = pop.loc[~in_bounds, bw_col].array
+#         pop['new_lbwsg_cat'] = self._get_category_for_ga_bw(self, pop, shifted_bw_col, ga_col, cat_col)
+#         pop['new_lbwsg_cat'] = np.select([in_bounds, ~in_bounds], [self._get_categories_for_indexer(idx), pop['lbwsg_cat']])
+#         pop['new_lbwsg_cat'] = np.where(in_bounds, self._get_categories_for_indexer(idx), pop['lbwsg_cat'])
+        pop['new_lbwsg_cat'] = self.get_category_for_bw_ga(pop, shifted_bw_col, ga_col, cat_colname='new_lbwsg_cat')
+        pop['lbwsg_cat_changed'] = pop['new_lbwsg_cat'] != pop['lbwsg_cat']
+        return pop
 
-        Example usage:
+    def _get_category_indexer(self, pop, bw_col, ga_col):
+        return self.categories_by_interval.index.get_indexer(pop.set_index([ga_col, bw_col]).index)
 
-        ga_bw_to_cat(31., 3298.)
+    def _get_categories_for_indexer(idx):
+        return self.categoriess_by_interval.array[idx]
 
-        Parameters
-        ----------
-        ga : float (gestational age)
-        bw : float (birth weight)
-
-        Results
-        -------
-        Returns cat for (bw,ga) pair
-        """
-
-        t = self.cat_df.query('@bw >= bw_start and @bw < bw_end and @ga >= ga_start and @ga < ga_end')
-        assert len(t) >= 1
-        return t.index[0]
-
+    def get_category_for_bw_ga(self, pop, bw_col, ga_col, cat_colname='lbwsg_cat'):
+#         idx = self._get_category_indexer(pop, bw_col, ga_col)
+#         return pd.Series(self._get_categories_for_indexer(idx), index=pop.index, name=cat_colname)
+        cats = categories_by_interval[pop.set_index([ga_col, bw_col]).index]
+        return pd.Series(cats.array, index=pop.index, name=cat_colname)
 
 class LBWSGRiskEffect:
     def __init__(self, rr_data, paf_data=None):
