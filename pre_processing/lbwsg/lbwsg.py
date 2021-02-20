@@ -12,9 +12,9 @@ from typing import Tuple#, Dict, Iterable
 # import gbd_mapping as gbd
 import importlib
 if importlib.util.find_spec('gbd_mapping') is not None:
-    gbd = importlib.import_module('gbd_mapping')
+    gbd_mapping = importlib.import_module('gbd_mapping')
 if importlib.util.find_spec('db_queries') is not None:
-    db_queries = importlib.import_module('db_queries')
+    get_ids = importlib.import_module('db_queries').get_ids
 
 # The support of the LBWSG distribution is nonconvex, but adding this one category makes it convex,
 # which makes life easier when shifting the birthweights or gestational ages.
@@ -202,10 +202,10 @@ def read_lbwsg_data_from_gbd2017_artifact(artifact_path, measure, *filter_terms,
     """
     key = f'risk_factor/low_birth_weight_and_short_gestation/{measure}'
     query_string = ' and '.join(filter_terms)
-    # NOTE: If draws is a numpy array, this line throws a warning:
+    # NOTE: If draws is a numpy array, the line `if draws=='all':` threw a warning:
     #  "FutureWarning: elementwise comparison failed; returning scalar instead,
     #   but in the future will perform elementwise comparison"
-    if draws==None:
+    if draws is None:
         draws = range(1000)
     
     with pd.HDFStore(artifact_path, mode='r') as store:
@@ -253,7 +253,7 @@ def get_lbwsg_categories_by_interval(include_missing=True):
     Return a pandas Series indexed by (gestational age interval, birth weight interval),
     mapping to the corresponding LBWSG category.
     """
-    category_dict = gbd.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
+    category_dict = gbd_mapping.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
     if include_missing:
         category_dict.update(MISSING_CATEGORY_GBD_2017)
     cats = (pd.DataFrame.from_dict(category_dict, orient='index')
@@ -270,7 +270,7 @@ def get_ga_bw_by_category(include_missing=False):
     Returns a dataframe indexed by LBWSG category, with four columns describing the intervals for that category:
     ga_start, ga_end, bw_start, bw_end
     """
-    cats = gbd.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
+    cats = gbd_mapping.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
     if include_missing:
         cats.update(MISSING_CATEGORY_GBD_2017)
     cats = pd.Series(cats)
@@ -302,31 +302,42 @@ def get_category_data_by_interval(include_missing=False):
     return cat_df.set_index(['ga','bw'])
 
 def get_category_descriptions(source='gbd_mapping'):
-    if source=='gbd_mapping':
-        cats = gbd.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
-        cats = (pd.Series(CATEGORY_TO_MEID_GBD_2019, name='modelable_entity_id')
-                .rename_axis('category')
-                .to_frame()
-                .join(pd.Series(cats, name='modelable_entity_name'))
-               )
-#         cats = pd.DataFrame.from_dict(cats, orient='index', columns=['modelable_entity_name']).rename_axis('category')
-    elif source=='get_ids':
-#         meid_query_string = f"modelable_entity_id in {CATEGORY_TO_MEID_GBD_2019.values()}"
-#         cats = db_queries.get_ids('modelable_entity').query(meid_query_string)
-#         cats = cats.reset_index(drop=True)
-        cats = (pd.DataFrame.from_dict(CATEGORY_TO_MEID_GBD_2019, orient='index', columns=['modelable_entity_id'])
-                .rename_axis('category')
-                .reset_index()
-                .merge(db_queries.get_ids('modelable_entity'))
-                .set_index('category')
-               )
+    # The "description" is the modelable entity name for the category
+    if source=='get_ids':
+        descriptions = get_ids('modelable_entity')
+    elif source=='gbd_mapping':
+        descriptions = gbd_mapping.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
+        descriptions = (pd.Series(descriptions, name='modelable_entity_name')
+                        .rename_axis('category').reset_index())
     else:
         raise ValueError(f"Unknown source: {source}")
 
+    cats = (pd.Series(CATEGORY_TO_MEID_GBD_2019, name='modelable_entity_id')
+            .rename_axis('category')
+            .reset_index()
+            .merge(descriptions) # on 'modelable_entity_id' if source=='get_ids', on 'category' if source=='gbd_mapping'
+           )
     return cats
 
-def get_category_data(source='gbd_mapping', include_missing=False):
-    pass
+def get_category_data(source='gbd_mapping'):
+    # Get the interval descriptions (modelable entity names) for the categories
+    cat_df = get_category_descriptions(source)
+
+    # Extract the endpoints of the gestational age and birthweight intervals into 4 separate columns
+    extraction_regex = r'Birth prevalence - \[(?P<ga_start>\d+), (?P<ga_end>\d+)\) wks, \[(?P<bw_start>\d+), (?P<bw_end>\d+)\) g'
+    cat_df = cat_df.join(cat_df['modelable_entity_name'].str.extract(extraction_regex).astype(int,copy=False))
+
+    def make_interval(left, right):
+        return pd.Interval(left=left, right=right, closed='left')
+
+    # Create 2 new columns of pandas.Interval objects for the gestational age and birthweight intervals
+    cat_df['ga'] = np.vectorize(make_interval)(cat_df.ga_start, cat_df.ga_end)
+    cat_df['bw'] = np.vectorize(make_interval)(cat_df.bw_start, cat_df.bw_end)
+
+    # Store the width of the intervals
+    cat_df['ga_width'] = cat_df['ga_end'] - cat_df['ga_start']
+    cat_df['bw_width'] = cat_df['bw_end'] - cat_df['bw_start']
+    return cat_df
 
 class LBWSGDistribution:
     """
