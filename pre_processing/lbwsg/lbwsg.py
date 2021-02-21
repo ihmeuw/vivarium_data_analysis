@@ -220,11 +220,12 @@ class LBWSGDistribution:
 #         self.cat_df = get_category_data_by_interval()
         cat_df = get_category_data()
         cat_data_cols = ['ga_start', 'ga_end', 'bw_start', 'bw_end', 'ga_width', 'bw_width']
-        self.interval_data_by_category = cat_df.set_index('category')[[cat_data_cols]]
+        self.interval_data_by_category = cat_df.set_index('category')[cat_data_cols]
         self.categories_by_interval = cat_df.set_index(['ga','bw'])['category']
     
     def assign_propensities(self, pop):
         """Assigns propensities relevant to this risk exposure to the population."""
+        # TODO: Fix this to use the same propensities across draws
         propensities = np.random.uniform(size=(len(pop),3))
         pop['lbwsg_cat_propensity'] = propensities[:,0] # Not actually used yet...
         pop['ga_propensity'] = propensities[:,1]
@@ -238,9 +239,17 @@ class LBWSGDistribution:
         # Unfortunately merging erases the index, so we have to manually reset it to pop.index
 #         df = pop.reset_index().merge(
 #             self.interval_data_by_category, left_on=category_column, right_on='category').set_index(pop.index.names)
-        df = merge_keep_index(pop, self.interval_data_by_category, left_on=category_column, right_on='category')
-        pop['gestational_age'] = df['ga_start'] + pop['ga_propensity'] * df['ga_width']
-        pop['birthweight'] = df['bw_start'] + pop['bw_propensity'] * df['bw_width']
+#         category_data = merge_keep_index(pop, self.interval_data_by_category, left_on=category_column, right_on='category')
+        category_data = get_category_data_for_population(pop, category_column)
+        pop['gestational_age'] = category_data['ga_start'] + pop['ga_propensity'] * category_data['ga_width']
+        pop['birthweight'] = category_data['bw_start'] + pop['bw_propensity'] * category_data['bw_width']
+
+    def get_category_data_for_population(self, pop, category_column):
+        interval_data = self.interval_data_by_category.loc[pop[category_column]].reset_index()
+        interval_data.index = pop.index
+        # This should pass if you call .reset_index() on interval_data before reassigning its index
+        assert interval_data[category_column].equals(pop[category_column])
+        return interval_data
 
     def assign_exposure(self, pop):
         """
@@ -356,7 +365,7 @@ class LBWSGDistribution:
     def _get_category_indexer(self, pop, bw_col, ga_col):
         return self.categories_by_interval.index.get_indexer(pd.MultiIndex.from_frame(pop[[ga_col, bw_col]]))
 
-    def _get_categories_for_indexer(idx):
+    def _get_categories_for_indexer(self, idx):
         return self.categoriess_by_interval.array[idx]
 
     def get_category_for_bw_ga(self, pop, bw_col, ga_col, cat_colname='lbwsg_cat'):
@@ -366,7 +375,7 @@ class LBWSGDistribution:
         return pd.Series(cats.array, index=pop.index, name=cat_colname)
 
     def assign_category_for_bw_ga(self, pop, bw_col, ga_col, cat_col, inplace=True):
-        cats = self.categories_by_interval[pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])]
+        cats = self.categories_by_interval.loc[pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])]
         if inplace:
             pop[cat_col] = cats.array
         else:
