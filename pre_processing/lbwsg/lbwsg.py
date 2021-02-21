@@ -277,12 +277,6 @@ class LBWSGDistribution:
 #         self.assign_ga_bw_from_propensities_within_cat(ga_bw_propensity, 'category')
 #         # Now need to copy columns to pop...
 
-#     def assign_category_for_ga_bw(self, pop, bw_col, ga_col, cat_col):
-
-#         pop_copy = pop.reset_index().set_index([ga_col, bw_col])
-#         cats = self.categories_by_interval[pop_copy.index]
-#         in_bounds = self.categories_by_interval.index.get_indexer(pop_copy.index) != -1
-
     def apply_birthweight_shift(self, pop, shift, bw_col='birthweight', ga_col='gestational_age'):
         """
         Applies the specified birthweight shift to the population, and finds the new LBWSG category.
@@ -326,7 +320,7 @@ class LBWSGDistribution:
         # (Or allow passing a prefix or suffix?)
         shifted_bw_col = f'shifted_{bw_col}'
         # Apply the shift in the new column
-        pop.loc[shifted_bw_col] = pop[bw_col] + shift
+        pop[shifted_bw_col] = pop[bw_col] + shift
         # Get integer index of category based on ga and shifted bw
         idx = self._get_category_indexer(pop, shifted_bw_col, ga_col)
         pop['valid_shift'] = in_bounds = idx != -1
@@ -339,8 +333,28 @@ class LBWSGDistribution:
         pop['lbwsg_cat_changed'] = pop['new_lbwsg_cat'] != pop['lbwsg_cat']
         return pop
 
+    def apply_birthweight_shift3(self, pop, shift, bw_col='birthweight', ga_col='gestational_age',
+                                 cat_col='lbwsg_cat', shifted_col_prefix='shifted', inplace=True):
+        if not inplace:
+            pop = pop[[ga_col, bw_col]].copy()
+        shifted_bw_col = f'{shifted_col_prefix}_{bw_col}'
+        shifted_cat_col = f'{shifted_col_prefix}_{cat_col}'
+        # Apply the shift in the new birthweight column
+        pop[shifted_bw_col] = pop[bw_col] + shift
+        # Get integer index of category based on ga and shifted bw, to check for out-of-bounds shifts
+        idx = self._get_category_indexer(pop, shifted_bw_col, ga_col)
+        pop['valid_shift'] = in_bounds = idx != -1
+        # Reset out-of-bounds birthweights back to their original values
+        pop.loc[~in_bounds, shifted_bw_col] = pop.loc[~in_bounds, bw_col].array
+        # Assign the new category
+        self.assign_category_for_bw_ga(pop, shifted_bw_col, ga_col, shifted_cat_col, inplace=True)
+        pop[f'{cat_col}_changed'] = pop[shifted_cat_col] != pop[cat_col]
+        if not inplace:
+            pop.drop(columns=[ga_col, bw_col], inplace=True)
+            return pop
+
     def _get_category_indexer(self, pop, bw_col, ga_col):
-        return self.categories_by_interval.index.get_indexer(pop.set_index([ga_col, bw_col]).index)
+        return self.categories_by_interval.index.get_indexer(pd.MultiIndex.from_frame(pop[[ga_col, bw_col]]))
 
     def _get_categories_for_indexer(idx):
         return self.categoriess_by_interval.array[idx]
@@ -348,8 +362,15 @@ class LBWSGDistribution:
     def get_category_for_bw_ga(self, pop, bw_col, ga_col, cat_colname='lbwsg_cat'):
 #         idx = self._get_category_indexer(pop, bw_col, ga_col)
 #         return pd.Series(self._get_categories_for_indexer(idx), index=pop.index, name=cat_colname)
-        cats = categories_by_interval[pop.set_index([ga_col, bw_col]).index]
+        cats = self.categories_by_interval[pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])]
         return pd.Series(cats.array, index=pop.index, name=cat_colname)
+
+    def assign_category_for_bw_ga(self, pop, bw_col, ga_col, cat_col, inplace=True):
+        cats = self.categories_by_interval[pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])]
+        if inplace:
+            pop[cat_col] = cats.array
+        else:
+            return pd.Series(cats.array, index=pop.index, name=cat_col)
 
 class LBWSGRiskEffect:
     def __init__(self, rr_data, paf_data=None):
