@@ -22,6 +22,9 @@ if importlib.util.find_spec('db_queries') is not None:
 # Note: In GBD 2019, this category is `cat124`, meid=20224.
 MISSING_CATEGORY_GBD_2017 = {'cat212': 'Birth prevalence - [37, 38) wks, [1000, 1500) g'}
 
+# Category to indicate that birthweight and gestational age are outside the domain of the risk distribution
+OUTSIDE_BOUNDS_CATEGORY = 'cat_outside_bounds'
+
 # The dictionary below was created with the following code:
 # CATEGORY_TO_MEID_GBD_2019 = (
 #     lbwsg_exposure_nigeria_birth_male
@@ -123,6 +126,7 @@ def read_lbwsg_data_from_gbd2017_artifact(artifact_path, measure, *filter_terms,
     # NOTE: If draws is a numpy array, the line `if draws=='all':` threw a warning:
     #  "FutureWarning: elementwise comparison failed; returning scalar instead,
     #   but in the future will perform elementwise comparison"
+    # So I changed default from 'all' to None.
     if draws is None:
         draws = range(1000)
     
@@ -204,11 +208,11 @@ def get_category_data(source='gbd_mapping'):
     cat_df['bw_width'] = cat_df['bw_end'] - cat_df['bw_start']
     return cat_df
 
-def merge_keep_index(df, *args, **kwargs):
-    """Performs df.merge(*args, **kwargs), but keeps the index from df in the result instead of resetting it.
-    Note that this may result in duplicate or missing index entries, depending on the results of the merge.
-    """
-    return df.reset_index().merge(*args, **kwargs).set_index(df.index.names)
+# def merge_keep_index(df, *args, **kwargs):
+#     """Performs df.merge(*args, **kwargs), but keeps the index from df in the result instead of resetting it.
+#     Note that this may result in duplicate or missing index entries, depending on the results of the merge.
+#     """
+#     return df.reset_index().merge(*args, **kwargs).set_index(df.index.names)
 
 class LBWSGDistribution:
     """
@@ -223,6 +227,10 @@ class LBWSGDistribution:
         self.interval_data_by_category = cat_df.set_index('category')[cat_data_cols]
         self.categories_by_interval = cat_df.set_index(['ga','bw'])['category']
     
+    def get_propensity_names(self):
+        """Get the names of the propensities used by this object."""
+        return ['lbwsg_cat_propensity', 'ga_propensity', 'bw_propensity']
+
     def assign_propensities(self, pop):
         """Assigns propensities relevant to this risk exposure to the population."""
         # TODO: Fix this to use the same propensities across draws
@@ -350,14 +358,21 @@ class LBWSGDistribution:
         shifted_cat_col = f'{shifted_col_prefix}_{cat_col}'
         # Apply the shift in the new birthweight column
         pop[shifted_bw_col] = pop[bw_col] + shift
-        # Get integer index of category based on ga and shifted bw, to check for out-of-bounds shifts
-        idx = self._get_category_indexer(pop, shifted_bw_col, ga_col)
-        pop['valid_shift'] = in_bounds = idx != -1
+        # Assign the new category and mark where (ga,bw) is out of bounds
+        self.assign_category_for_bw_ga(pop, shifted_bw_col, ga_col, shifted_cat_col,
+                                       fill_outside_bounds=OUTSIDE_BOUNDS_CATEGORY, inplace=True)
+        pop['valid_shift'] = pop[shifted_cat_col] != OUTSIDE_BOUNDS_CATEGORY
         # Reset out-of-bounds birthweights back to their original values
-        pop.loc[~in_bounds, shifted_bw_col] = pop.loc[~in_bounds, bw_col].array
-        # Assign the new category
-        self.assign_category_for_bw_ga(pop, shifted_bw_col, ga_col, shifted_cat_col, inplace=True)
+        pop.loc[~pop['valid_shift'], shifted_bw_col] = pop.loc[~pop['valid_shift'], bw_col].array
         pop[f'{cat_col}_changed'] = pop[shifted_cat_col] != pop[cat_col]
+#         # Get integer index of category based on ga and shifted bw, to check for out-of-bounds shifts
+#         idx = self._get_category_indexer(pop, shifted_bw_col, ga_col)
+#         pop['valid_shift'] = in_bounds = idx != -1
+#         # Reset out-of-bounds birthweights back to their original values
+#         pop.loc[~in_bounds, shifted_bw_col] = pop.loc[~in_bounds, bw_col].array
+#         # Assign the new category
+#         self.assign_category_for_bw_ga(pop, shifted_bw_col, ga_col, shifted_cat_col, inplace=True)
+#         pop[f'{cat_col}_changed'] = pop[shifted_cat_col] != pop[cat_col]
         if not inplace:
             pop.drop(columns=[ga_col, bw_col], inplace=True)
             return pop
@@ -374,8 +389,18 @@ class LBWSGDistribution:
         cats = self.categories_by_interval[pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])]
         return pd.Series(cats.array, index=pop.index, name=cat_colname)
 
-    def assign_category_for_bw_ga(self, pop, bw_col, ga_col, cat_col, inplace=True):
-        cats = self.categories_by_interval.loc[pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])]
+    def assign_category_for_bw_ga(self, pop, bw_col, ga_col, cat_col, fill_outside_bounds=None, inplace=True):
+        # We need to convert the ga and bw columns to a pandas Index to work with the IntervalIndex of categories_by_interval
+        ga_bw_for_pop = pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])
+        # Default is to raise an indexing error if bw and gw are outside bounds
+        if fill_outside_bounds is None:
+            cats = self.categories_by_interval.loc[ga_bw_for_pop]
+        # Otherwise, the category for out-of-bounds (ga,bw) pairs will be assigned the value `fill_outside_bounds`
+        else:
+            # Get integer index of category, to check for out-of-bounds (ga,bw) pairs (iidx==-1 if not (ga,bw) not in index)
+            iidx = self.categories_by_interval.index.get_indexer(ga_bw_for_pop)
+            cats = np.where(iidx != -1, self.categoriess_by_interval.iloc[iidx], fill_outside_bounds)
+        # We have to cast cats to a pandas array to avoid trying to match differing indexes
         if inplace:
             pop[cat_col] = cats.array
         else:
