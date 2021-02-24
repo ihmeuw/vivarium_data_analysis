@@ -174,16 +174,15 @@ def get_category_descriptions(source='gbd_mapping'):
     # The "description" is the modelable entity name for the category
     if source=='get_ids':
         descriptions = get_ids('modelable_entity')
-    elif source=='gbd_mapping':
-        descriptions = gbd_mapping.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
+    else:
+        if source=='gbd_mapping':
+            descriptions = gbd_mapping.risk_factors.low_birth_weight_and_short_gestation.categories.to_dict()
+        # Assume source is a dictionary of categories to descriptions (i.e. modelable entity names)
         descriptions = (pd.Series(descriptions, name='modelable_entity_name')
                         .rename_axis('lbwsg_category').reset_index())
-    else:
-        raise ValueError(f"Unknown source: {source}")
 
     cats = (pd.Series(CATEGORY_TO_MEID_GBD_2019, name='modelable_entity_id')
-            .rename_axis('lbwsg_category')
-            .reset_index()
+            .rename_axis('lbwsg_category').reset_index()
             .merge(descriptions) # merge on 'modelable_entity_id' if source=='get_ids', on 'lbwsg_category' if source=='gbd_mapping'
            )
     return cats
@@ -196,16 +195,14 @@ def get_category_data(source='gbd_mapping'):
     extraction_regex = r'Birth prevalence - \[(?P<ga_start>\d+), (?P<ga_end>\d+)\) wks, \[(?P<bw_start>\d+), (?P<bw_end>\d+)\) g'
     cat_df = cat_df.join(cat_df['modelable_entity_name'].str.extract(extraction_regex).astype(int,copy=False))
 
-    def make_interval(left, right):
-        return pd.Interval(left=left, right=right, closed='left')
+    @np.vectorize
+    def get_interval_and_width(left, right):
+        return pd.Interval(left=left, right=right, closed='left'), right-left
 
-    # Create 2 new columns of pandas.Interval objects for the gestational age and birthweight intervals
-    cat_df['ga'] = np.vectorize(make_interval)(cat_df.ga_start, cat_df.ga_end)
-    cat_df['bw'] = np.vectorize(make_interval)(cat_df.bw_start, cat_df.bw_end)
-
-    # Store the width of the intervals
-    cat_df['ga_width'] = cat_df['ga_end'] - cat_df['ga_start']
-    cat_df['bw_width'] = cat_df['bw_end'] - cat_df['bw_start']
+    # Create 2 new columns of pandas.Interval objects for the gestational age and birthweight intervals,
+    # and 2 more new columns for the interval widths
+    cat_df['ga'], cat_df['ga_width'] = get_interval_and_width(cat_df.ga_start, cat_df.ga_end)
+    cat_df['bw'], cat_df['bw_width'] = get_interval_and_width(cat_df.bw_start, cat_df.bw_end)
     return cat_df
 
 # def merge_keep_index(df, *args, **kwargs):
