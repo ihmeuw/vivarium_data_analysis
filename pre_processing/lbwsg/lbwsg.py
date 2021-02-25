@@ -143,6 +143,22 @@ def read_lbwsg_data_from_gbd2017_artifact(artifact_path, measure, *filter_terms,
 #     print(index_cols.columns)
     return pd.concat(draw_data_dfs, axis=1, copy=False).set_index(index_cols.columns.to_list())
 
+def rescale_prevalence(exposure):
+    """Rescales prevalences to add to 1 in LBWSG exposure data pulled from GBD 2019 by get_draws."""
+    # Drop residual 'cat125' parameter with meid==NaN, and convert meid col from float to int
+    exposure = exposure.dropna().astype({'modelable_entity_id': int})
+    # Define some categories of columns
+    draw_cols = exposure.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
+    category_cols = ['modelable_entity_id', 'parameter']
+    index_cols = exposure.columns.difference(draw_cols)
+    sum_index = index_cols.difference(category_cols)
+    # Add prevalences over categories (indexed by meid and/or parameter) to get denominator for rescaling
+    prevalence_sum = exposure.groupby(sum_index.to_list())[draw_cols].sum()
+    # Divide prevalences by total to rescale them to add to 1, and reindex to put df back in original form
+    exposure = exposure.set_index(index_cols.to_list()) / prevalence_sum
+    exposure.reset_index(inplace=True)
+    return exposure
+
 def convert_draws_to_long_form(data, name='value', copy=True):
     """
     Converts GBD data stored with one column per draw to "long form" with a 'draw' column wihch specifies the draw.
