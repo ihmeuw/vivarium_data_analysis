@@ -154,7 +154,7 @@ def rescale_prevalence(exposure):
     sum_index = index_cols.difference(category_cols)
     # Add prevalences over categories (indexed by meid and/or parameter) to get denominator for rescaling
     prevalence_sum = exposure.groupby(sum_index.to_list())[draw_cols].sum()
-    # Divide prevalences by total to rescale them to add to 1, and reindex to put df back in original form
+    # Divide prevalences by total to rescale them to add to 1, and reset index to put df back in original form
     exposure = exposure.set_index(index_cols.to_list()) / prevalence_sum
     exposure.reset_index(inplace=True)
     return exposure
@@ -221,12 +221,6 @@ def get_category_data(source='gbd_mapping'):
     cat_df['bw'], cat_df['bw_width'] = get_interval_and_width(cat_df.bw_start, cat_df.bw_end)
     return cat_df
 
-# def merge_keep_index(df, *args, **kwargs):
-#     """Performs df.merge(*args, **kwargs), but keeps the index from df in the result instead of resetting it.
-#     Note that this may result in duplicate or missing index entries, depending on the results of the merge.
-#     """
-#     return df.reset_index().merge(*args, **kwargs).set_index(df.index.names)
-
 class LBWSGDistribution:
     """
     Class to assign and adjust birthweights and gestational ages of a simulated population.
@@ -240,9 +234,9 @@ class LBWSGDistribution:
         self.interval_data_by_category = cat_df.set_index('lbwsg_category')[cat_data_cols]
         self.categories_by_interval = cat_df.set_index(['ga','bw'])['lbwsg_category']
     
-    def get_propensity_names(self):
-        """Get the names of the propensities used by this object."""
-        return ['lbwsg_cat_propensity', 'ga_propensity', 'bw_propensity']
+#     def get_propensity_names(self):
+#         """Get the names of the propensities used by this object."""
+#         return ['lbwsg_cat_propensity', 'ga_propensity', 'bw_propensity']
 
     def assign_propensities(self, pop):
         """Assigns propensities relevant to this risk exposure to the population."""
@@ -253,24 +247,8 @@ class LBWSGDistribution:
         pop['bw_propensity'] = propensities[:,2]
         
     def assign_category_from_propensity(self, pop):
+        """Assigns LBWSG categories to the population based on simulant propensities."""
         pass
-
-    def assign_ga_bw_from_propensities_within_cat(self, pop, category_column):
-        # Merge pop with cat_df to get function composition pop.index -> category -> category data
-        # Unfortunately merging erases the index, so we have to manually reset it to pop.index
-#         df = pop.reset_index().merge(
-#             self.interval_data_by_category, left_on=category_column, right_on='lbwsg_category').set_index(pop.index.names)
-#         category_data = merge_keep_index(pop, self.interval_data_by_category, left_on=category_column, right_on='lbwsg_category')
-        category_data = self.get_category_data_for_population(pop, category_column)
-        pop['gestational_age'] = category_data['ga_start'] + pop['ga_propensity'] * category_data['ga_width']
-        pop['birthweight'] = category_data['bw_start'] + pop['bw_propensity'] * category_data['bw_width']
-
-    def get_category_data_for_population(self, pop, category_column):
-        interval_data = self.interval_data_by_category.loc[pop[category_column]].reset_index()
-        interval_data.index = pop.index
-        # This should pass if you call .reset_index() on interval_data before reassigning its index
-        assert interval_data[category_column].equals(pop[category_column])
-        return interval_data
 
     def assign_exposure(self, pop):
         """
@@ -288,83 +266,35 @@ class LBWSGDistribution:
 #             pop.loc[group.index, 'lbwsg_category'] = \ # This line is really slow!!!
             pop.loc[pop_mask, 'lbwsg_category'] = \
                 np.random.choice(cat_dist['lbwsg_category'], size=len(group), p=cat_dist['prevalence'])
-        
-#         enn_male = (pop.age_start == 0) & (pop.sex == 'Male')
-#         enn_female = (pop.age_start == 0) & (pop.sex == 'Female')
-#         lnn_male = (pop.age_start > 0) & (pop.age_start < 1) & (pop.sex == 'Male')
-#         lnn_female = (pop.age_start > 0) & (pop.age_start < 1) & (pop.sex == 'Female')
-        
-#         cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
-#         pop.loc[enn_male, 'lbwsg_category'] = \
-#                 np.random.choice(cat_dist['lbwsg_category'], size=len(group), p=cat_dist['prevalence'])
 
         # Use propensities for ga and bw to assign a ga and bw within each category
         self.assign_ga_bw_from_propensities_within_cat(pop, 'lbwsg_category')
-        
-#         ga_bw_propensity = pd.DataFrame(np.random.uniform(size=(len(pop),2)),
-#                                         index=pop.index, columns=['ga_propensity','bw_propensity'])
-#         ga_bw_propensity['lbwsg_category'] = pop['lbwsg_category']
-#         self.assign_ga_bw_from_propensities_within_cat(ga_bw_propensity, 'lbwsg_category')
-#         # Now need to copy columns to pop...
 
-    def apply_birthweight_shift(self, pop, shift, bw_col='birthweight', ga_col='gestational_age'):
+    def assign_ga_bw_from_propensities_within_cat(self, pop, category_column):
+        """Assigns birthweights and gestational ages using propensities.
+        If the propensities are uniformly distributed in [0,1], the birthweights and gestational ages
+        will be uniformly distributed within each LBWSG category.
         """
-        Applies the specified birthweight shift to the population, and finds the new LBWSG category.
-        If a simulant would be shifted out of range of the valid categories, they remain at their original
-        birthweight and category (note that this strategy is only reasonable for small shifts).
+        category_data = self.get_category_data_for_population(pop, category_column)
+        pop['gestational_age'] = category_data['ga_start'] + pop['ga_propensity'] * category_data['ga_width']
+        pop['birthweight'] = category_data['bw_start'] + pop['bw_propensity'] * category_data['bw_width']
+
+    def get_category_data_for_population(self, pop, category_column):
+        """Returns a dataframe indexed by pop.index, where each row contains data about
+        the corresponding simulant's LBWSG category.
         """
-        index_cols = pop.index.names
-        pop = pop[[ga_col, bw_col]]
-        # Name the new column 'new_birthweight', but rename the existing column if that's what it's called already
-        # TODO: Maybe just prepend (or append?) 'shifted' instead, so that the original column name stays the same.
-        # Or allow passing a prefix or suffix.
-        if bw_col == 'new_birthweigh':
-            pop = pop.rename(columns={bw_col: 'old_new_birthweight'})
-        new_bw_col = 'new_birthweight'
-        # Throws warning: "A value is trying to be set on a copy of a slice from a DataFrame."
-#         pop.loc[:, new_bw_col] = pop[bw_col] + shift 
-        pop = pop.assign(**{new_bw_col: pop[bw_col] + shift})
-        # TODO: Factor out some of the below code into a new function,
-        # e.g. assign_category_for_ga_bw(pop, bw_col, ga_col, cat_col)
-        # TODO: Also, return additional columns, e.g. the original category, and whether the category has changed
-        # Categories should be computed using the proposed function above, rather than relying on what's already
-        # stored in pop
-        pop = pop.reset_index().set_index([ga_col, new_bw_col])
-        in_bounds = self.categories_by_interval.index.get_indexer(pop.index) != -1
-        pop['valid_shift'] = in_bounds
-        pop.loc[in_bounds, 'new_lbwsg_category'] = self.categories_by_interval.loc[pop.loc[in_bounds].index].array
-        pop = pop.reset_index(new_bw_col).set_index(bw_col, append=True)
-        pop.loc[~in_bounds, 'new_lbwsg_category'] = self.categories_by_interval.loc[pop.loc[~in_bounds].index].array
-#         pop.loc[~in_bounds, 'new_lbwsg_category'] = pop.loc[~in_bounds, 'lbwsg_category']
-        pop = pop.reset_index()
-        pop.loc[~in_bounds, new_bw_col] = pop.loc[~in_bounds, bw_col].values
-        return pop.set_index(index_cols)
+        interval_data = self.interval_data_by_category.loc[pop[category_column]]
+        # This verifies that the correct population indexes will be assigned to the category data below
+        assert pd.Series(interval_data.index, index=pop.index).equals(pop[category_column]), \
+            'Categories misaligned with population index!'
+        interval_data.index = pop.index
+        return interval_data
 
-    def apply_birthweight_shift2(self, pop, shift, bw_col='birthweight', ga_col='gestational_age'):
-#         index_cols = pop.index.names
-        pop = pop[[ga_col, bw_col]].copy()
-        # Assign existing categories
-        pop['lbwsg_category'] = self.get_category_for_bw_ga(pop, bw_col, ga_col)
-#         pop['lbwsg_category'] = self._get_categories_for_indexer(self._get_category_indexer(pop, bw_col, ga_col))
-        # Prepend 'shifted', so that the original column name stays the same.
-        # (Or allow passing a prefix or suffix?)
-        shifted_bw_col = f'shifted_{bw_col}'
-        # Apply the shift in the new column
-        pop[shifted_bw_col] = pop[bw_col] + shift
-        # Get integer index of category based on ga and shifted bw
-        idx = self._get_category_indexer(pop, shifted_bw_col, ga_col)
-        pop['valid_shift'] = in_bounds = idx != -1
-        # Reset out-of-bounds birthweights back to their original values
-        pop.loc[~in_bounds, shifted_bw_col] = pop.loc[~in_bounds, bw_col].array
-#         pop['new_lbwsg_category'] = self._get_category_for_ga_bw(self, pop, shifted_bw_col, ga_col, cat_col)
-#         pop['new_lbwsg_category'] = np.select([in_bounds, ~in_bounds], [self._get_categories_for_indexer(idx), pop['lbwsg_category']])
-#         pop['new_lbwsg_category'] = np.where(in_bounds, self._get_categories_for_indexer(idx), pop['lbwsg_category'])
-        pop['new_lbwsg_category'] = self.get_category_for_bw_ga(pop, shifted_bw_col, ga_col, cat_colname='new_lbwsg_category')
-        pop['lbwsg_category_changed'] = pop['new_lbwsg_category'] != pop['lbwsg_category']
-        return pop
-
-    def apply_birthweight_shift3(self, pop, shift, bw_col='birthweight', ga_col='gestational_age',
+    def apply_birthweight_shift(self, pop, shift, bw_col='birthweight', ga_col='gestational_age',
                                  cat_col='lbwsg_category', shifted_col_prefix='shifted', inplace=True):
+        """Applies the specified birthweight shift to the population. Modifies the population table in place
+        unless inplace=False, in which case a new population table is returned.
+        """
         if not inplace:
             pop = pop[[ga_col, bw_col, cat_col]].copy()
         shifted_bw_col = f'{shifted_col_prefix}_{bw_col}'
@@ -380,37 +310,28 @@ class LBWSGDistribution:
         pop.loc[~pop['valid_shift'], shifted_cat_col] = self.assign_category_for_bw_ga(
             pop.loc[~pop['valid_shift']], shifted_bw_col, ga_col, shifted_cat_col, inplace=False)
         pop[f'{cat_col}_changed'] = pop[shifted_cat_col] != pop[cat_col]
-#         # Get integer index of category based on ga and shifted bw, to check for out-of-bounds shifts
-#         idx = self._get_category_indexer(pop, shifted_bw_col, ga_col)
-#         pop['valid_shift'] = in_bounds = idx != -1
-#         # Reset out-of-bounds birthweights back to their original values
-#         pop.loc[~in_bounds, shifted_bw_col] = pop.loc[~in_bounds, bw_col].array
-#         # Assign the new category
-#         self.assign_category_for_bw_ga(pop, shifted_bw_col, ga_col, shifted_cat_col, inplace=True)
-#         pop[f'{cat_col}_changed'] = pop[shifted_cat_col] != pop[cat_col]
         if not inplace:
             pop.drop(columns=[ga_col, bw_col, cat_col], inplace=True)
             return pop
 
-    def _get_category_indexer(self, pop, bw_col, ga_col):
-        return self.categories_by_interval.index.get_indexer(pd.MultiIndex.from_frame(pop[[ga_col, bw_col]]))
-
-    def _get_categories_for_indexer(self, idx):
-        return self.categoriess_by_interval.array[idx]
-
-    def get_category_for_bw_ga(self, pop, bw_col, ga_col, cat_colname='lbwsg_category'):
-#         idx = self._get_category_indexer(pop, bw_col, ga_col)
-#         return pd.Series(self._get_categories_for_indexer(idx), index=pop.index, name=cat_colname)
-        cats = self.categories_by_interval[pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])]
-        return pd.Series(cats.array, index=pop.index, name=cat_colname)
-
     def assign_category_for_bw_ga(self, pop, bw_col, ga_col, cat_col, fill_outside_bounds=None, inplace=True):
+        """Assigns the correct LBWSG category to each simulant in the population,
+        given birthweights and gestational ages.
+        Modifies the population table in place if inplace=True (default), otherwise returns a pandas Series
+        containing each simulant's LBWSG category, indexed by pop.index.
+        If `fill_outside_bounds` is None (default), an indexing error (KeyError) will be raised (by IntervalIndex) if any
+        (birthweight, gestational age) pair does not correspond to a valid LBWSG category.
+        If `fill_outside_bounds` is not None, its value will be used to fill the category value for invalid
+        (birthweight, gestational age) pairs.
+        """
         # Need to convert the ga and bw columns to a pandas Index to work with .get_indexer below
         ga_bw_for_pop = pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])
         # Default is to raise an indexing error if bw and gw are outside bounds
         if fill_outside_bounds is None:
             # Must convert cats to a pandas array to avoid trying to match differing indexes
             cats = self.categories_by_interval.loc[ga_bw_for_pop].array
+            # TODO: See if doing the following instead will result in the same behavior as below for invalid bw, ga:
+            # cats = self.categories_by_interval.reindex(ga_bw_for_pop).array
         # Otherwise, the category for out-of-bounds (ga,bw) pairs will be assigned the value `fill_outside_bounds`
         else:
             # Get integer index of category, to check for out-of-bounds (ga,bw) pairs (iidx==-1 if (ga,bw) not in index)
