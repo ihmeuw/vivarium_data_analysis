@@ -15,6 +15,11 @@ if importlib.util.find_spec('gbd_mapping') is not None:
     gbd_mapping = importlib.import_module('gbd_mapping')
 if importlib.util.find_spec('db_queries') is not None:
     get_ids = importlib.import_module('db_queries').get_ids
+if importlib.util.find_spec('get_draws') is not None:
+    get_draws = importlib.import_module('get_draws').api.get_draws
+
+LBWSG_REI_ID = 339 # GBD's "risk/etiology/impairment" id for Low birthweight and short gestation
+GBD_2019_ROUND_ID = 6
 
 # The support of the LBWSG distribution is nonconvex, but adding this one category makes it convex,
 # which makes life easier when shifting the birthweights or gestational ages.
@@ -37,6 +42,7 @@ OUTSIDE_BOUNDS_CATEGORY = 'cat_outside_bounds'
 #     )
 # where `lbwsg_exposure_nigeria_birth_male` was exposure data from `get_draws`.
 
+# Modelable entity IDs for LBWSG categories
 CATEGORY_TO_MEID_GBD_2019 = {
  'cat2': 10755,
  'cat8': 10761,
@@ -98,7 +104,7 @@ CATEGORY_TO_MEID_GBD_2019 = {
  'cat124': 20224
 }
 
-def read_lbwsg_data_by_draw_from_gbd2017_artifact(artifact_path, measure, draw, rename=None):
+def read_lbwsg_data_by_draw_from_gbd_2017_artifact(artifact_path, measure, draw, rename=None):
     """
     Reads one draw of LBWSG data from an artifact.
     
@@ -117,7 +123,7 @@ def read_lbwsg_data_by_draw_from_gbd2017_artifact(artifact_path, measure, draw, 
     data = pd.concat([index, draw], axis=1)
     return data
 
-def read_lbwsg_data_from_gbd2017_artifact(artifact_path, measure, *filter_terms, draws=None):
+def read_lbwsg_data_from_gbd_2017_artifact(artifact_path, measure, *filter_terms, draws=None):
     """
     Reads multiple draws from the artifact.
     """
@@ -142,6 +148,52 @@ def read_lbwsg_data_from_gbd2017_artifact(artifact_path, measure, *filter_terms,
 
 #     print(index_cols.columns)
     return pd.concat(draw_data_dfs, axis=1, copy=False).set_index(index_cols.columns.to_list())
+
+def pull_lbwsg_exposure_from_gbd_2019(location_ids, year_ids=2019, save_to_hdf=None, hdf_key=None):
+    """Calls get_draws to pull LBWSG exposure data from GBD 2019."""
+    # Make sure type(location_ids) is list
+    location_ids = [location_ids] if isinstance(location_ids, int) else list(location_ids)
+    lbwsg_exposure = get_draws(
+        'rei_id',
+        gbd_id=LBWSG_REI_ID,
+        source='exposure',
+        location_id=location_ids,
+        year_id=year_ids,
+#         sex_id=sex_ids, # Default is [1,2], but 3 also exists
+        gbd_round_id=GBD_2019_ROUND_ID,
+        status='best',
+        decomp_step='step4',
+    )
+    if save_to_hdf is not None:
+        if hdf_key is None:
+            description = f"location_ids_{'_'.join(location_ids)}"
+            hdf_key = f"/gbd_2019/exposure/{description}"
+        lbwsg_exposure.to_hdf(save_to_hdf, hdf_key)
+    return lbwsg_exposure
+
+def pull_lbwsg_relative_risks_from_gbd_2019(cause_ids=None, year_ids=2019, save_to_hdf=None, hdf_key=None):
+    """Calls get_draws to pull LBWSG relative risk data from GBD 2019."""
+    global_location_id = 1 # Any other location would return values for global location instead
+    if cause_ids is None:
+        cause_ids = []
+    elif isinstance(cause_ids, int):
+        cause_ids = [cause_ids]
+    lbwsg_rr = get_draws(
+            gbd_id_type=['rei_id']+['cause_id']*len(cause_ids), # Types must match gbd_id's
+            gbd_id=[LBWSG_REI_ID, *cause_ids],
+            source='rr',
+            location_id=global_location_id,
+            year_id=year_ids,
+            gbd_round_id=GBD_2019_ROUND_ID,
+            status='best',
+            decomp_step='step4',
+        )
+    if save_to_hdf is not None:
+        if hdf_key is None:
+            description = 'all' #if len(cause_ids)==0 else f"cause_ids_{'_'.join(cause_ids)}"
+            hdf_key = f"/gbd_2019/relative_risk/{description}"
+        lbwsg_rr.to_hdf(save_to_hdf, hdf_key)
+    return lbwsg_rr
 
 def rescale_prevalence(exposure):
     """Rescales prevalences to add to 1 in LBWSG exposure data pulled from GBD 2019 by get_draws."""
@@ -172,7 +224,7 @@ def preprocess_gbd_data(df):
     # sex_id_to_sex = pd.Series({1: 'Male', 2: 'Female', 3: 'Both', 4: 'Unknown'}, name='sex').rename_axis('sex_id')
     sex_col = sex_id_to_sex.loc[df['sex_id']]
     sex_col.index = df.index
-    df = df.join(sex_col).rename(columns={'parameter': 'lbwsg_category'})
+    df = df.join(sex_col).rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
     index_cols = ['location_id', 'year_id', 'sex', 'age_group_id', 'lbwsg_category']
     draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
     return df.set_index(index_cols)[draw_cols]
