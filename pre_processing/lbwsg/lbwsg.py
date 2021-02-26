@@ -42,6 +42,7 @@ OUTSIDE_BOUNDS_CATEGORY = 'cat_outside_bounds'
 #     )
 # where `lbwsg_exposure_nigeria_birth_male` was exposure data from `get_draws`.
 
+# TODO: Perhaps store the category descriptions here as well
 # Modelable entity IDs for LBWSG categories
 CATEGORY_TO_MEID_GBD_2019 = {
  'cat2': 10755,
@@ -103,6 +104,10 @@ CATEGORY_TO_MEID_GBD_2019 = {
  'cat123': 20232,
  'cat124': 20224
 }
+
+####################################################
+# READING AND PROCESSING GBD DATA FOR LBWSG #
+####################################################
 
 def read_lbwsg_data_by_draw_from_gbd_2017_artifact(artifact_path, measure, draw, rename=None):
     """
@@ -173,7 +178,7 @@ def pull_lbwsg_exposure_from_gbd_2019(location_ids, year_ids=2019, save_to_hdf=N
 
 def pull_lbwsg_relative_risks_from_gbd_2019(cause_ids=None, year_ids=2019, save_to_hdf=None, hdf_key=None):
     """Calls get_draws to pull LBWSG relative risk data from GBD 2019."""
-    global_location_id = 1 # Any other location would return values for global location instead
+    global_location_id = 1 # RR's are the same for all locations - they all propagate up to location_id==1
     if cause_ids is None:
         cause_ids = []
     elif isinstance(cause_ids, int):
@@ -216,15 +221,20 @@ def preprocess_gbd_data(df):
     Note that location_id for rr data will always be 1 (Global), so it won't
     match location_id for exposure data.
     """
-    # TODO: Add this:
-    # if df contains NaN or sum of prevalence is not 1, rescale prevalence
+    if 'cause_id' in df and len(cause_ids:=df['cause_id'].unique())>1:
+        # If df is RR data, filter to a single cause id - all affected causes have the same RR's
+        df = df.loc[df['cause_id']==cause_ids[0]]
+    elif 'measure_id' in df and list(df['measure_id'].unique()) == [5]: # measure_id 5 is Prevalence
+        # If df is exposure data, rescale prevalence
+        # TODO: Perhaps check if df contains NaN or sum of prevalence is not 1
+        df = rescale_prevalence(df)
 
     sex_id_to_sex = get_ids('sex').set_index('sex_id')['sex']
     # # Or hardcode it:
     # sex_id_to_sex = pd.Series({1: 'Male', 2: 'Female', 3: 'Both', 4: 'Unknown'}, name='sex').rename_axis('sex_id')
     sex_col = sex_id_to_sex.loc[df['sex_id']]
     sex_col.index = df.index
-    df = df.join(sex_col).rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
+    df = df.join(sex_col).rename(columns={'parameter': 'lbwsg_category'})
     index_cols = ['location_id', 'year_id', 'sex', 'age_group_id', 'lbwsg_category']
     draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
     return df.set_index(index_cols)[draw_cols]
@@ -248,6 +258,10 @@ def convert_draws_to_long_form(data, name='value', copy=True):
     data = data.stack()
     data.rename(name, inplace=True)
     return data.reset_index()
+
+##########################################################
+# DATA ABOUT LBWSG RISK CATEGORIES #
+##########################################################
 
 def get_intervals_from_name(name: str) -> Tuple[pd.Interval, pd.Interval]:
     """Converts a LBWSG category name to a pair of intervals.
@@ -293,6 +307,10 @@ def get_category_data(source='gbd_mapping'):
     cat_df['ga'], cat_df['ga_width'] = get_interval_and_width(cat_df.ga_start, cat_df.ga_end)
     cat_df['bw'], cat_df['bw_width'] = get_interval_and_width(cat_df.bw_start, cat_df.bw_end)
     return cat_df
+
+##########################################################
+# CLASS FOR LBWSG RISK DISTRIBUTION #
+##########################################################
 
 class LBWSGDistribution:
     """
@@ -415,6 +433,10 @@ class LBWSGDistribution:
             pop[cat_col] = cats
         else:
             return pd.Series(cats, index=pop.index, name=cat_col)
+
+##########################################################
+# CLASSES FOR LBWSG RISK EFFECTS (RELATIVE RISKS) #
+##########################################################
 
 class LBWSGRiskEffect:
     def __init__(self, rr_data, paf_data=None):
