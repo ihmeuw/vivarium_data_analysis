@@ -159,6 +159,27 @@ def rescale_prevalence(exposure):
     exposure.reset_index(inplace=True)
     return exposure
 
+def preprocess_gbd_data(df):
+    """df can be exposure or rr data?
+    Note that location_id for rr data will always be 1 (Global), so it won't
+    match location_id for exposure data.
+    """
+    # TODO: Add this:
+    # if df contains NaN or sum of prevalence is not 1, rescale prevalence
+
+    sex_id_to_sex = get_ids('sex').set_index('sex_id')['sex']
+    # # Or hardcode it:
+    # sex_id_to_sex = pd.Series({1: 'Male', 2: 'Female', 3: 'Both', 4: 'Unknown'}, name='sex').rename_axis('sex_id')
+    sex_col = sex_id_to_sex.loc[df['sex_id']]
+    sex_col.index = df.index
+    df = df.join(sex_col).rename(columns={'parameter': 'lbwsg_category'})
+    index_cols = ['location_id', 'year_id', 'sex', 'age_group_id', 'lbwsg_category']
+    draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
+    return df.set_index(index_cols)[draw_cols]
+
+def preprocess_artifact_data(df):
+    pass
+
 def convert_draws_to_long_form(data, name='value', copy=True):
     """
     Converts GBD data stored with one column per draw to "long form" with a 'draw' column wihch specifies the draw.
