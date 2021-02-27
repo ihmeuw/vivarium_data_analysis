@@ -41,3 +41,60 @@ def get_age_group_data(birth_age_end=None, birth_age_end_description=None):
     age_group_df['age_start_description'] = age_descriptions[:-1]
     age_group_df['age_end_description'] = age_descriptions[1:]
     return age_group_df
+
+def get_sex_id_to_sex_map(source=None):
+    """Returns a pandas Series with index 'sex_id' (int) and name 'sex' (Categorical)."""
+    if source is None:
+        sex_id_to_sex = pd.Series({1: 'Male', 2: 'Female', 3: 'Both', 4: 'Unknown'}, name='sex', dtype='category')
+        sex_id_to_sex.rename_axis('sex_id', inplace=True)
+    elif source=='get_ids':
+        sex_id_to_sex = get_ids('sex').set_index('sex_id')['sex'].astype('category')
+    else:
+        raise ValueError(f"Unknown source: {source}")
+    return sex_id_to_sex
+
+
+def initialize_population_table(draws, num_simulants, cohort_age=0.0):
+    """Creates populations for baseline scenario and iron fortification intervention scenario,
+    assigns birthweights and gestational ages to each simulant, shifts birthweights appropriately,
+    and assigns relative risks for mortality based on resulting LBWSG categories.
+    """
+    # Create baseline population and assign demographic data
+    pop = pd.DataFrame(index=pd.MultiIndex.from_product(
+        [draws, range(num_simulants)], names=['draw', 'simulant_id']))
+    assign_sex(pop)
+    assign_age_to_cohort(pop, cohort_age)
+    return pop
+
+def assign_simulant_property(pop, property_name, choice_function=None):
+    # Default is to assign uniform propensities
+    if choice_function is None:
+        choice_function = lambda size: np.random.uniform(size=size)
+    simulant_index = pop.index.unique(level='simulant_id')
+    simulant_values = pd.Series(choice_function(len(simulant_index)), index=simulant_index, name=property_name)
+    # Join simulant values with pop.index to broadcast the same values over all draws
+    pop[property_name] = pop[[]].join(simulant_values)
+
+def assign_sex(pop):
+#     pop['sex'] = np.random.choice(['Male', 'Female'], size=len(pop))
+#     simulant_index = pop.index.unique(level='simulant_id')
+#     sexes = pd.Series(np.random.choice(['Male', 'Female'], size=len(simulant_ids)), index=simulant_index, name='sex')
+#     pop['sex'] = pop[[]].join(sexes)
+    def choose_random_sex(size): return np.random.choice(['Male', 'Female'], size=size)
+    assign_simulant_property(pop, 'sex', choose_random_sex)
+
+def assign_age_to_cohort(pop, cohort_age=0.0):
+    pop['age'] = cohort_age
+
+def assign_propensity(pop, propensity_name):
+    """Assigns an independent uniform random number to each simulant.
+    Enables sharing randomness across draws and scenarios.
+    """
+#     pop[propensity_name] = np.random.uniform(size=len(pop))
+    assign_simulant_property(pop, propensity_name, choice_function=None)
+
+def assign_propensities(pop, propensity_names):
+    """Assigns propensities for each name in a list of propensity names.
+    """
+    for propensity_name in propensity_names:
+        assign_simulant_property(pop, propensity_name)
