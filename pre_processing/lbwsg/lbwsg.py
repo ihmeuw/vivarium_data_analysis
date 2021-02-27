@@ -315,6 +315,15 @@ def get_category_data(source='gbd_mapping'):
 # CLASS FOR LBWSG RISK DISTRIBUTION #
 ##########################################################
 
+def get_age_to_id_map(age_group_ids):
+    age_data = demography.get_age_group_data()
+    return age_data.query("age_group_id in @age_group_ids")['age_group_id']
+
+def sample_from_propensity(propensity, categories, category_cdf):
+    """Sample categories using the propensities."""
+    condlist = [propensity <= category_cdf[cat].array for cat in categories]
+    return np.select(condlist, choicelist = categories)
+
 class LBWSGDistribution:
     """
     Class to assign and adjust birthweights and gestational ages of a simulated population.
@@ -327,22 +336,47 @@ class LBWSGDistribution:
         cat_data_cols = ['ga_start', 'ga_end', 'bw_start', 'bw_end', 'ga_width', 'bw_width']
         self.interval_data_by_category = cat_df.set_index('lbwsg_category')[cat_data_cols]
         self.categories_by_interval = cat_df.set_index(['ga','bw'])['lbwsg_category']
+        self.age_to_id = get_age_to_id_map(self.exposure_dist['age_group_id'].unique())
     
 #     def get_propensity_names(self):
 #         """Get the names of the propensities used by this object."""
-#         return ['lbwsg_cat_propensity', 'ga_propensity', 'bw_propensity']
+#         return ['lbwsg_category_propensity', 'ga_propensity', 'bw_propensity']
 
     def assign_propensities(self, pop):
         """Assigns propensities relevant to this risk exposure to the population."""
         # TODO: Fix this to use the same propensities across draws
         propensities = np.random.uniform(size=(len(pop),3))
-        pop['lbwsg_cat_propensity'] = propensities[:,0] # Not actually used yet...
+        pop['lbwsg_category_propensity'] = propensities[:,0] # Not actually used yet...
         pop['ga_propensity'] = propensities[:,1]
         pop['bw_propensity'] = propensities[:,2]
 
     def assign_category_from_propensity(self, pop):
         """Assigns LBWSG categories to the population based on simulant propensities."""
-        pass
+        pop_exposure_cdf = self.get_exposure_cdf_for_population(pop)
+        lbwsg_cat = sample_from_propensity(pop['lbwsg_category_propensity'], pop_exposure_cdf.columns, pop_exposure_cdf)
+        pop['lbwsg_category'] = lbwsg_cat
+
+    def get_exposure_cdf_for_population(self, pop):
+        exposure_cdf = self.get_exposure_cdf()
+        age_groups = self.get_age_groups_for_population(pop)
+        extra_index_cols = ['age_group_id', 'sex']
+        return (pop[['sex']].join(age_groups)
+                .set_index(extra_index_cols, append=True)
+                .join(exposure_cdf)
+                .droplevel(extra_index_cols)
+               )
+
+    def get_exposure_cdf(self):
+        index_cols = self.exposure_dist.columns.difference(['prevalence']).to_list()
+        exposure_cdf = self.exposure_dist.set_index(index_cols).unstack('lbwsg_category').cumsum(axis=1)
+       # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
+        exposure_cdf = exposure_cdf.droplevel(['location_id','year_id']).droplevel(0, axis=1)
+        return exposure_cdf
+    
+    def get_age_groups_for_population(self, pop):
+        age_groups = self.age_to_id.reindex(pop['age'])
+        age_groups.index = pop.index
+        return age_groups
 
     def assign_exposure(self, pop):
         """
