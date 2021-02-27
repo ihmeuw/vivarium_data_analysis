@@ -9,6 +9,9 @@ import pandas as pd, numpy as np
 import re
 from typing import Tuple#, Dict, Iterable
 
+import demography
+# from demography import get_age_group_data, get_sex_id_map
+
 # import gbd_mapping as gbd
 import importlib
 if importlib.util.find_spec('gbd_mapping') is not None:
@@ -216,11 +219,12 @@ def rescale_prevalence(exposure):
     exposure.reset_index(inplace=True)
     return exposure
 
-def preprocess_gbd_data(df):
+def preprocess_gbd_data(df, draws=None):
     """df can be exposure or rr data?
     Note that location_id for rr data will always be 1 (Global), so it won't
     match location_id for exposure data.
     """
+    # Note: walrus operator := requires Python 3.8 or higher
     if 'cause_id' in df and len(cause_ids:=df['cause_id'].unique())>1:
         # If df is RR data, filter to a single cause id - all affected causes have the same RR's
         df = df.loc[df['cause_id']==cause_ids[0]]
@@ -229,14 +233,13 @@ def preprocess_gbd_data(df):
         # TODO: Perhaps check if df contains NaN or sum of prevalence is not 1
         df = rescale_prevalence(df)
 
-    sex_id_to_sex = get_ids('sex').set_index('sex_id')['sex']
-    # # Or hardcode it:
-    # sex_id_to_sex = pd.Series({1: 'Male', 2: 'Female', 3: 'Both', 4: 'Unknown'}, name='sex').rename_axis('sex_id')
-    sex_col = sex_id_to_sex.loc[df['sex_id']]
-    sex_col.index = df.index
-    df = df.join(sex_col).rename(columns={'parameter': 'lbwsg_category'})
+    sex_id_to_sex = demography.get_sex_id_to_sex_map()
+    df = df.join(sex_id_to_sex, on='sex_id').rename(columns={'parameter': 'lbwsg_category'})
     index_cols = ['location_id', 'year_id', 'sex', 'age_group_id', 'lbwsg_category']
-    draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
+    if draws is None:
+        draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
+    else:
+        draw_cols = [f"draw_{i}" for i in draws]
     return df.set_index(index_cols)[draw_cols]
 
 def preprocess_artifact_data(df):
@@ -318,7 +321,7 @@ class LBWSGDistribution:
     """
     def __init__(self, exposure_data):
         self.exposure_dist = convert_draws_to_long_form(exposure_data, name='prevalence')
-        self.exposure_dist.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
+#         self.exposure_dist.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
 #         self.cat_df = get_category_data_by_interval()
         cat_df = get_category_data()
         cat_data_cols = ['ga_start', 'ga_end', 'bw_start', 'bw_end', 'ga_width', 'bw_width']
@@ -336,7 +339,7 @@ class LBWSGDistribution:
         pop['lbwsg_cat_propensity'] = propensities[:,0] # Not actually used yet...
         pop['ga_propensity'] = propensities[:,1]
         pop['bw_propensity'] = propensities[:,2]
-        
+
     def assign_category_from_propensity(self, pop):
         """Assigns LBWSG categories to the population based on simulant propensities."""
         pass
@@ -349,11 +352,11 @@ class LBWSGDistribution:
         # Based on simulant's age and sex, assign a random LBWSG category from GBD distribution
         # Index levels: location  sex  age_start  age_end   year_start  year_end  parameter
 #         idxs = []
-        for (draw, sex, age_start), group in pop.groupby(['draw', 'sex', 'age_start']):
-            exposure_mask = (self.exposure_dist.draw==draw) & (self.exposure_dist.sex==sex) & (self.exposure_dist.age_start==age_start)
+        for (draw, sex, age_group_id), group in pop.groupby(['draw', 'sex', 'age_group_id'], observed=True):
+            exposure_mask = (self.exposure_dist.draw==draw) & (self.exposure_dist.sex==sex) & (self.exposure_dist.age_group_id==age_group_id)
             cat_dist = self.exposure_dist.loc[exposure_mask]
 #             cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
-            pop_mask = (pop.sex == sex) & (pop.age_start == age_start) & (pop.index.get_level_values('draw') == draw)
+            pop_mask = (pop.sex == sex) & (pop.age_group_id == age_group_id) & (pop.index.get_level_values('draw') == draw)
 #             pop.loc[group.index, 'lbwsg_category'] = \ # This line is really slow!!!
             pop.loc[pop_mask, 'lbwsg_category'] = \
                 np.random.choice(cat_dist['lbwsg_category'], size=len(group), p=cat_dist['prevalence'])
