@@ -321,8 +321,8 @@ def get_age_to_id_map(age_group_ids):
 
 def sample_from_propensity(propensity, categories, category_cdf):
     """Sample categories using the propensities."""
-    condlist = [propensity <= category_cdf[cat].array for cat in categories]
-    return np.select(condlist, choicelist = categories)
+    condlist = [propensity <= category_cdf[cat] for cat in categories]
+    return np.select(condlist, choicelist=categories)
 
 class LBWSGDistribution:
     """
@@ -350,11 +350,17 @@ class LBWSGDistribution:
         pop['ga_propensity'] = propensities[:,1]
         pop['bw_propensity'] = propensities[:,2]
 
-    def assign_category_from_propensity(self, pop):
-        """Assigns LBWSG categories to the population based on simulant propensities."""
-        pop_exposure_cdf = self.get_exposure_cdf_for_population(pop)
-        lbwsg_cat = sample_from_propensity(pop['lbwsg_category_propensity'], pop_exposure_cdf.columns, pop_exposure_cdf)
-        pop['lbwsg_category'] = lbwsg_cat
+    def get_age_groups_for_population(self, pop):
+        age_groups = self.age_to_id.reindex(pop['age'])
+        age_groups.index = pop.index
+        return age_groups
+
+    def get_exposure_cdf(self):
+        index_cols = self.exposure_dist.columns.difference(['prevalence']).to_list()
+        exposure_cdf = self.exposure_dist.set_index(index_cols).unstack('lbwsg_category').cumsum(axis=1)
+       # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
+        exposure_cdf = exposure_cdf.droplevel(['location_id','year_id']).droplevel(0, axis=1)
+        return exposure_cdf
 
     def get_exposure_cdf_for_population(self, pop):
         exposure_cdf = self.get_exposure_cdf()
@@ -364,19 +370,14 @@ class LBWSGDistribution:
                 .set_index(extra_index_cols, append=True)
                 .join(exposure_cdf)
                 .droplevel(extra_index_cols)
+                .reindex(pop.index)
                )
 
-    def get_exposure_cdf(self):
-        index_cols = self.exposure_dist.columns.difference(['prevalence']).to_list()
-        exposure_cdf = self.exposure_dist.set_index(index_cols).unstack('lbwsg_category').cumsum(axis=1)
-       # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
-        exposure_cdf = exposure_cdf.droplevel(['location_id','year_id']).droplevel(0, axis=1)
-        return exposure_cdf
-    
-    def get_age_groups_for_population(self, pop):
-        age_groups = self.age_to_id.reindex(pop['age'])
-        age_groups.index = pop.index
-        return age_groups
+    def assign_category_from_propensity(self, pop):
+        """Assigns LBWSG categories to the population based on simulant propensities."""
+        pop_exposure_cdf = self.get_exposure_cdf_for_population(pop)
+        lbwsg_cat = sample_from_propensity(pop['lbwsg_category_propensity'], pop_exposure_cdf.columns, pop_exposure_cdf)
+        pop['lbwsg_category'] = lbwsg_cat
 
     def assign_exposure(self, pop):
         """
@@ -386,15 +387,16 @@ class LBWSGDistribution:
         # Based on simulant's age and sex, assign a random LBWSG category from GBD distribution
         # Index levels: location  sex  age_start  age_end   year_start  year_end  parameter
 #         idxs = []
-        for (draw, sex, age_group_id), group in pop.groupby(['draw', 'sex', 'age_group_id'], observed=True):
-            exposure_mask = (self.exposure_dist.draw==draw) & (self.exposure_dist.sex==sex) & (self.exposure_dist.age_group_id==age_group_id)
-            cat_dist = self.exposure_dist.loc[exposure_mask]
-#             cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
-            pop_mask = (pop.sex == sex) & (pop.age_group_id == age_group_id) & (pop.index.get_level_values('draw') == draw)
-#             pop.loc[group.index, 'lbwsg_category'] = \ # This line is really slow!!!
-            pop.loc[pop_mask, 'lbwsg_category'] = \
-                np.random.choice(cat_dist['lbwsg_category'], size=len(group), p=cat_dist['prevalence'])
+#         for (draw, sex, age_group_id), group in pop.groupby(['draw', 'sex', 'age_group_id'], observed=True):
+#             exposure_mask = (self.exposure_dist.draw==draw) & (self.exposure_dist.sex==sex) & (self.exposure_dist.age_group_id==age_group_id)
+#             cat_dist = self.exposure_dist.loc[exposure_mask]
+# #             cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
+#             pop_mask = (pop.sex == sex) & (pop.age_group_id == age_group_id) & (pop.index.get_level_values('draw') == draw)
+# #             pop.loc[group.index, 'lbwsg_category'] = \ # This line is really slow!!!
+#             pop.loc[pop_mask, 'lbwsg_category'] = \
+#                 np.random.choice(cat_dist['lbwsg_category'], size=len(group), p=cat_dist['prevalence'])
 
+        self.assign_category_from_propensity(pop)
         # Use propensities for ga and bw to assign a ga and bw within each category
         self.assign_ga_bw_from_propensities_within_cat(pop, 'lbwsg_category')
 
