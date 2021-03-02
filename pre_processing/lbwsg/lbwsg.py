@@ -315,10 +315,7 @@ def get_category_data(source='gbd_mapping'):
 # CLASS FOR LBWSG RISK DISTRIBUTION #
 ##########################################################
 
-def get_age_to_id_map(age_group_ids):
-    age_data = demography.get_age_group_data()
-    return age_data.query("age_group_id in @age_group_ids")['age_group_id']
-
+# TODO: Move this function to prob_utils.py, and come up with a better name for it
 def sample_from_propensity(propensity, categories, category_cdf):
     """Sample categories using the propensities."""
     condlist = [propensity <= category_cdf[cat] for cat in categories]
@@ -336,8 +333,8 @@ class LBWSGDistribution:
         cat_data_cols = ['ga_start', 'ga_end', 'bw_start', 'bw_end', 'ga_width', 'bw_width']
         self.interval_data_by_category = cat_df.set_index('lbwsg_category')[cat_data_cols]
         self.categories_by_interval = cat_df.set_index(['ga','bw'])['lbwsg_category']
-        self.age_to_id = get_age_to_id_map(self.exposure_dist['age_group_id'].unique())
-    
+#         self.age_to_id = get_age_to_id_map(self.exposure_dist['age_group_id'].unique())
+
 #     def get_propensity_names(self):
 #         """Get the names of the propensities used by this object."""
 #         return ['lbwsg_category_propensity', 'ga_propensity', 'bw_propensity']
@@ -350,10 +347,10 @@ class LBWSGDistribution:
         pop['ga_propensity'] = propensities[:,1]
         pop['bw_propensity'] = propensities[:,2]
 
-    def get_age_groups_for_population(self, pop):
-        age_groups = self.age_to_id.reindex(pop['age'])
-        age_groups.index = pop.index
-        return age_groups
+#     def get_age_groups_for_population(self, pop):
+#         age_groups = self.age_to_id.reindex(pop['age'])
+#         age_groups.index = pop.index
+#         return age_groups
 
     def get_exposure_cdf(self):
         index_cols = self.exposure_dist.columns.difference(['prevalence']).to_list()
@@ -364,14 +361,30 @@ class LBWSGDistribution:
 
     def get_exposure_cdf_for_population(self, pop):
         exposure_cdf = self.get_exposure_cdf()
-        age_groups = self.get_age_groups_for_population(pop)
         extra_index_cols = ['age_group_id', 'sex']
-        return (pop[['sex']].join(age_groups)
-                .set_index(extra_index_cols, append=True)
-                .join(exposure_cdf)
-                .droplevel(extra_index_cols)
-                .reindex(pop.index)
-               )
+        pop_exposure_cdf = (
+            pop[extra_index_cols]
+            .set_index(extra_index_cols, append=True)
+            .join(exposure_cdf)
+            .droplevel(extra_index_cols)
+            .reindex(pop.index)
+        )
+        return pop_exposure_cdf
+    
+    def get_exposure_cdf_for_population2(self, pop):
+        exposure_cdf = self.get_exposure_cdf()
+#         index_cols = exposure_cdf.index.names # Should be ['age_group_id', 'draw', 'sex'], but order not guaranteed
+        extra_index_cols = ['age_group_id', 'sex']
+        pop_exposure_cdf = pop[extra_index_cols].join(exposure_cdf, on=exposure_cdf.index.names)
+        pop_exposure_cdf.drop(columns=extra_index_cols, inplace=True)
+        return pop_exposure_cdf
+
+    def get_exposure_cdf_for_population1(self, pop):
+        exposure_cdf = self.get_exposure_cdf()
+        age_sex_draw = pop[['age_group_id', 'sex']].reset_index('draw')[['age_group_id', 'draw', 'sex']]
+        pop_exposure_cdf = exposure_cdf.reindex(age_sex_draw)
+        pop_exposure_cdf.index = pop.index
+        return pop_exposure_cdf
 
     def assign_category_from_propensity(self, pop):
         """Assigns LBWSG categories to the population based on simulant propensities."""
@@ -418,6 +431,10 @@ class LBWSGDistribution:
         assert pd.Series(interval_data.index, index=pop.index).equals(pop[category_column]), \
             'Categories misaligned with population index!'
         interval_data.index = pop.index
+        return interval_data
+    
+    def get_category_data_for_population1(self, pop, category_column):
+        interval_data = pop.join(self.interval_data_by_category, on=category_column)
         return interval_data
 
     def apply_birthweight_shift(self, pop, shift, bw_col='birthweight', ga_col='gestational_age',
