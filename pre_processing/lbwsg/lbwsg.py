@@ -339,6 +339,7 @@ class LBWSGDistribution:
     Class to assign and adjust birthweights and gestational ages of a simulated population.
     """
     def __init__(self, exposure_data):
+        # TODO: Should we NOT convert draws to long form since we want them wide for the CDF?
         self.exposure_dist = convert_draws_to_long_form(exposure_data, name='prevalence')
 #         self.exposure_dist.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
 #         self.cat_df = get_category_data_by_interval()
@@ -366,6 +367,8 @@ class LBWSGDistribution:
 #         return age_groups
 
     def get_exposure_cdf(self):
+        # TODO: Perhaps move some of this to the preprocessing step, e.g. setting the index to
+        # everything except the prevalence column, and unstacking (or never stacking in the first place)
         index_cols = self.exposure_dist.columns.difference(['prevalence']).to_list()
         exposure_cdf = self.exposure_dist.set_index(index_cols).unstack('lbwsg_category').cumsum(axis=1)
        # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
@@ -385,6 +388,7 @@ class LBWSGDistribution:
         return pop_exposure_cdf
     
     def get_exposure_cdf_for_population2(self, pop):
+        # TODO: Make this the version that actually gets used
         exposure_cdf = self.get_exposure_cdf()
 #         index_cols = exposure_cdf.index.names # Should be ['age_group_id', 'draw', 'sex'], but order not guaranteed
         extra_index_cols = ['age_group_id', 'sex']
@@ -401,6 +405,7 @@ class LBWSGDistribution:
         return pop_exposure_cdf
 
     def assign_category_from_propensity(self, pop):
+        # TODO: allow specifying the category column name, and add an option to not modify pop in place
         """Assigns LBWSG categories to the population based on simulant propensities."""
         pop_exposure_cdf = self.get_exposure_cdf_for_population(pop)
         lbwsg_cat = sample_from_propensity(pop['lbwsg_category_propensity'], pop_exposure_cdf.columns, pop_exposure_cdf)
@@ -511,11 +516,11 @@ class LBWSGDistribution:
 class LBWSGRiskEffect:
     def __init__(self, rr_data, paf_data=None):
         self.rr_data = convert_draws_to_long_form(rr_data, name='relative_risk')
-        # TODO: Maybe use 'lbwsg_category' instead of 'category' throughout this module?
-        self.rr_data.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
+#         self.rr_data.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
         self.paf_data = paf_data
         
     def assign_relative_risk(self, pop, cat_colname):
+        # TODO: Fix tthis because it doesn't work with GBD data - see version below
         # TODO: Figure out better method of dealing with category column name...
         cols_to_match = ['sex', 'age_start', 'draw', cat_colname]
         df = pop.reset_index().merge(
@@ -525,13 +530,17 @@ class LBWSGRiskEffect:
         pop['lbwsg_relative_risk'] = df['relative_risk']
 
     def get_relative_risks_for_populatation(self, pop, cat_colname):
+        # TODO: Maybe this should just be called `assign_relative_risk`, with an option for inplace or not
         rr_map = self.get_rr_mapper()
         extra_index_cols = ['age_group_id', 'sex', cat_colname]
-        pop=pop[extra_index_cols].rename(columns={cat_colname:'lbwsg_category'})
+        # Rename the category column so it matches that in the RR data
+        pop = pop[extra_index_cols].rename(columns={cat_colname:'lbwsg_category'})
         pop_rrs = pop.join(rr_map, on=rr_map.index.names).drop(columns=extra_index_cols)
         return pop_rrs
 
     def get_rr_mapper(self):
+        # TODO: Set the correct index in preprocessing instead of here, and perhaps just have this function
+        # drop the location and year levels. Also, rename this function to somthing better.
         index_cols = self.rr_data.columns.difference(['relative_risk']).to_list()
         rr_map = self.rr_data.set_index(index_cols)
        # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
