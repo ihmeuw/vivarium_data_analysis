@@ -317,9 +317,22 @@ def get_category_data(source='gbd_mapping'):
 
 # TODO: Move this function to prob_utils.py, and come up with a better name for it
 def sample_from_propensity(propensity, categories, category_cdf):
-    """Sample categories using the propensities."""
+    """Sample categories using the propensities.
+    propensity is a number between 0 and 1
+    categories is a list of categories
+    category_cdf is a mapping of categories to cumulative probabilities.
+    """
     condlist = [propensity <= category_cdf[cat] for cat in categories]
     return np.select(condlist, choicelist=categories)
+
+def sample_from_propensity_as_arrays(propensity, categories, category_cdf):
+    """Sample categories using the propensities.
+    propensity is a number (or list/array of numbers) between 0 and 1
+    categories is a list of categories
+    category_cdf is a 2d array of shape (len(propensity), len(categories)).
+    """
+    category_index = (np.asarray(propensity).reshape((-1,1)) > np.asarray(category_cdf)).sum(axis=1)
+    return np.asarray(categories)[category_index]
 
 class LBWSGDistribution:
     """
@@ -377,6 +390,7 @@ class LBWSGDistribution:
         extra_index_cols = ['age_group_id', 'sex']
         pop_exposure_cdf = pop[extra_index_cols].join(exposure_cdf, on=exposure_cdf.index.names)
         pop_exposure_cdf.drop(columns=extra_index_cols, inplace=True)
+        pop_exposure_cdf.rename_axis(columns=exposure_cdf.columns.name, inplace=True, copy=False)
         return pop_exposure_cdf
 
     def get_exposure_cdf_for_population1(self, pop):
@@ -509,4 +523,18 @@ class LBWSGRiskEffect:
         ).set_index(pop.index.names)
 #         return df
         pop['lbwsg_relative_risk'] = df['relative_risk']
+
+    def get_relative_risks_for_populatation(self, pop, cat_colname):
+        rr_map = self.get_rr_mapper()
+        extra_index_cols = ['age_group_id', 'sex', cat_colname]
+        pop=pop[extra_index_cols].rename(columns={cat_colname:'lbwsg_category'})
+        pop_rrs = pop.join(rr_map, on=rr_map.index.names).drop(columns=extra_index_cols)
+        return pop_rrs
+
+    def get_rr_mapper(self):
+        index_cols = self.rr_data.columns.difference(['relative_risk']).to_list()
+        rr_map = self.rr_data.set_index(index_cols)
+       # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
+        rr_map = rr_map.droplevel(['location_id','year_id'])#.droplevel(0, axis=1)
+        return rr_map
 
