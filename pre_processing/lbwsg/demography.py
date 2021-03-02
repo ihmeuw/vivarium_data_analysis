@@ -25,6 +25,7 @@ def get_age_group_data(birth_age_end=None, birth_age_end_description=None):
     # Unzip the list of 2-tuples to get two lists
     age_breaks, age_descriptions = zip(*age_breaks_and_descriptions)
     
+    # TODO: Maybe add a hardcoded version of this to avoid calling get_ids unless requested
     # Get age group names for the age group id's corresponding to the intervals between the age breaks
     # Birth, ENN, LNN, PNN, 1-4, 5-9,...,75-79, 80-85,...,90-94, 95+
     age_group_ids = [164, *range(2,21), *range(30,33), 235]
@@ -41,6 +42,16 @@ def get_age_group_data(birth_age_end=None, birth_age_end_description=None):
     age_group_df['age_start_description'] = age_descriptions[:-1]
     age_group_df['age_end_description'] = age_descriptions[1:]
     return age_group_df
+
+# def get_age_to_age_id_map(age_group_ids=None):
+#     age_data = get_age_group_data()
+#     if age_group_ids is not None:
+#         age_data = age_data.query("age_group_id in @age_group_ids")
+#     return age_data['age_group_id']
+
+def get_age_to_age_id_map(birth_age_end=None):
+    birth_age_end_description = None if birth_age_end is None else 'irrelevant'
+    return get_age_group_data(birth_age_end, birth_age_end_description)['age_group_id']
 
 def get_sex_id_to_sex_map(source=None):
     """Returns a pandas Series with index 'sex_id' (int) and name 'sex' (Categorical)."""
@@ -72,19 +83,24 @@ def assign_simulant_property(pop, property_name, choice_function=None):
         choice_function = lambda size: np.random.uniform(size=size)
     simulant_index = pop.index.unique(level='simulant_id')
     simulant_values = pd.Series(choice_function(len(simulant_index)), index=simulant_index, name=property_name)
-    # Join simulant values with pop.index to broadcast the same values over all draws
-    pop[property_name] = pop[[]].join(simulant_values)
+    # Join or reindex simulant values with pop.index to broadcast the same values over all draws
+#     pop[property_name] = pop[[]].join(simulant_values)
+    pop[property_name] = simulant_values.reindex(pop.index, level='simulant_id')
 
 def assign_sex(pop):
 #     pop['sex'] = np.random.choice(['Male', 'Female'], size=len(pop))
 #     simulant_index = pop.index.unique(level='simulant_id')
 #     sexes = pd.Series(np.random.choice(['Male', 'Female'], size=len(simulant_ids)), index=simulant_index, name='sex')
 #     pop['sex'] = pop[[]].join(sexes)
+#     sex_id_map = get_sex_id_to_sex_map()
+#     male_female = sex_id_map.loc[sex_id_map.isin(['Male', 'Female'])].cat.remove_unused_categories()
     def choose_random_sex(size): return np.random.choice(['Male', 'Female'], size=size)
     assign_simulant_property(pop, 'sex', choose_random_sex)
+    pop['sex'].astype('category', copy=False)
 
 def assign_age_to_cohort(pop, cohort_age=0.0):
     pop['age'] = cohort_age
+    pop['age_group_id'] = get_age_to_age_id_map().reindex(pop['age']).array
 
 def assign_propensity(pop, propensity_name):
     """Assigns an independent uniform random number to each simulant.
