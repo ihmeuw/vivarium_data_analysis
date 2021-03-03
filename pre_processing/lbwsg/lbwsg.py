@@ -302,13 +302,14 @@ def get_category_data(source='gbd_mapping'):
     cat_df = cat_df.join(cat_df['modelable_entity_name'].str.extract(extraction_regex).astype(int,copy=False))
 
     @np.vectorize
-    def get_interval_and_width(left, right):
-        return pd.Interval(left=left, right=right, closed='left'), right-left
+    def interval_width_midpoint(left, right):
+        interval = pd.Interval(left=left, right=right, closed='left')
+        return interval, interval.length, interval.mid
 
     # Create 2 new columns of pandas.Interval objects for the gestational age and birthweight intervals,
     # and 2 more new columns for the interval widths
-    cat_df['ga'], cat_df['ga_width'] = get_interval_and_width(cat_df.ga_start, cat_df.ga_end)
-    cat_df['bw'], cat_df['bw_width'] = get_interval_and_width(cat_df.bw_start, cat_df.bw_end)
+    cat_df['ga'], cat_df['ga_width'], cat_df['ga_midpoint'] = interval_width_midpoint(cat_df.ga_start, cat_df.ga_end)
+    cat_df['bw'], cat_df['bw_width'], cat_df['bw_midpoint'] = interval_width_midpoint(cat_df.bw_start, cat_df.bw_end)
     return cat_df
 
 ##########################################################
