@@ -533,9 +533,9 @@ class LBWSGRiskEffect:
     def get_relative_risks_for_populatation(self, pop, cat_colname):
         # TODO: Maybe this should just be called `assign_relative_risk`, with an option for inplace or not
         rr_map = self.get_rr_mapper()
-        extra_index_cols = ['age_group_id', 'sex', cat_colname]
         # Rename the category column so it matches that in the RR data
-        pop = pop[extra_index_cols].rename(columns={cat_colname:'lbwsg_category'})
+        extra_index_cols = ['age_group_id', 'sex', 'lbwsg_category']
+        pop = pop.rename(columns={cat_colname: 'lbwsg_category'})[extra_index_cols]
         pop_rrs = pop.join(rr_map, on=rr_map.index.names).drop(columns=extra_index_cols)
         return pop_rrs
 
