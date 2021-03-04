@@ -533,5 +533,20 @@ class LBWSGRiskEffect:
     def get_relative_risks_by_category(self):
         """Get relative risks indexed by age_group_id, sex, draw, and lbwsg_category."""
        # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
-        return self.rr_data.droplevel(['location_id','year_id'])#.droplevel(0, axis=1)
+        return self.rr_data.droplevel(['location_id','year_id'])
+
+    def compute_paf(self, exposure, save_paf=True):
+        """"exposure is assumed to be preprocessed using above functions."""
+         # Drop global location to broadcast over exposure's locations
+        rr = self.rr_data.droplevel('location_id')
+        # Inner join indices to avoid NaN's when we multiply
+        df = rr.to_frame().join(exposure)
+        weighted_rr = df['relative_risk'] * df['prevalence']
+        # Sum the prevalence-weighted RR's over LBWSG categories to get the mean RR
+        groupby_levels = weighted_rr.index.names.difference(['lbwsg_category'])
+        mean_rr = weighted_rr.groupby(groupby_levels).sum()
+        paf = ((mean_rr - 1) / mean_rr).rename('paf')
+        if save_paf:
+            self.paf_data = paf
+        return paf
 
