@@ -567,8 +567,9 @@ class LBWSGDistribution:
 
 class LBWSGRiskEffect:
     def __init__(self, rr_data, paf_data=None):
-        self.rr_data = convert_draws_to_long_form(rr_data, name='relative_risk')
+#         self.rr_data = convert_draws_to_long_form(rr_data, name='relative_risk')
 #         self.rr_data.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
+        self.rr_data = rr_data
         self.paf_data = paf_data
         
     def assign_relative_risk1(self, pop, cat_colname):
@@ -582,14 +583,15 @@ class LBWSGRiskEffect:
         pop['lbwsg_relative_risk'] = df['relative_risk']
 
     def assign_relative_risk(self, pop, cat_colname='lbwsg_category', rr_colname='lbwsg_relative_risk', inplace=True):
-        rr_map = self.get_rr_mapper()
+        rrs_by_category = self.get_relative_risks_by_category()
+        # Filter population to relevant columns to avoid potential column name collisions
+        extra_index_cols = ['sex', 'age_group_id', cat_colname] # columns to match besides draw, which is in pop.index
+        pop_data = pop[extra_index_cols]
         # Rename the category column so it matches that in the RR data
-#         extra_index_cols = ['age_group_id', 'sex', 'lbwsg_category']
         if cat_colname != 'lbwsg_category':
-            pop_standardized = pop.rename(columns={cat_colname: 'lbwsg_category'})
-        else:
-            pop_standardized = pop
-        pop_rrs = pop_standardized.join(rr_map, on=rr_map.index.names)['relative_risk'].rename(rr_colname)
+            pop_data = pop_data.rename(columns={cat_colname: 'lbwsg_category'})
+
+        pop_rrs = pop_data.join(rrs_by_category, on=rrs_by_category.index.names)['relative_risk'].rename(rr_colname)
 #         pop_rrs = (
 #             pop[extra_index_cols]
 #             .join(rr_map, on=rr_map.index.names)
@@ -604,19 +606,18 @@ class LBWSGRiskEffect:
 
     def get_relative_risks_for_populatation(self, pop, cat_colname):
         # TODO: Maybe this should just be called `assign_relative_risk`, with an option for inplace or not
-        rr_map = self.get_rr_mapper()
+        rr_map = self.get_relative_risks_by_category()
         # Rename the category column so it matches that in the RR data
         extra_index_cols = ['age_group_id', 'sex', 'lbwsg_category']
         pop = pop.rename(columns={cat_colname: 'lbwsg_category'})[extra_index_cols]
         pop_rrs = pop.join(rr_map, on=rr_map.index.names).drop(columns=extra_index_cols)
         return pop_rrs
 
-    def get_rr_mapper(self):
-        # TODO: Set the correct index in preprocessing instead of here, and perhaps just have this function
-        # drop the location and year levels. Also, rename this function to somthing better.
-        index_cols = self.rr_data.columns.difference(['relative_risk']).to_list()
-        rr_map = self.rr_data.set_index(index_cols)
+    def get_relative_risks_by_category(self):
+#         # DONE: Set the correct index in preprocessing instead of here, and perhaps just have this function
+#         # drop the location and year levels. Also, rename this function to somthing better.
+#         index_cols = self.rr_data.columns.difference(['relative_risk']).to_list()
+#         rr_map = self.rr_data.set_index(index_cols)
        # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
-        rr_map = rr_map.droplevel(['location_id','year_id'])#.droplevel(0, axis=1)
-        return rr_map
+        return self.rr_data.droplevel(['location_id','year_id'])#.droplevel(0, axis=1)
 
