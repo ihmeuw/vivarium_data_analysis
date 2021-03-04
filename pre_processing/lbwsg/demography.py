@@ -102,6 +102,10 @@ def assign_age_to_cohort(pop, cohort_age=0.0):
     pop['age'] = cohort_age
     pop['age_group_id'] = get_age_to_age_id_map().reindex(pop['age']).array
 
+def increase_age(pop, age_increment):
+    pop['age'] += age_increment
+    pop['age_group_id'] = get_age_to_age_id_map().reindex(pop['age']).array
+
 def assign_propensity(pop, propensity_name):
     """Assigns an independent uniform random number to each simulant.
     Enables sharing randomness across draws and scenarios.
