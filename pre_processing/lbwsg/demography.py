@@ -96,7 +96,7 @@ def assign_sex(pop):
 #     male_female = sex_id_map.loc[sex_id_map.isin(['Male', 'Female'])].cat.remove_unused_categories()
     def choose_random_sex(size): return np.random.choice(['Male', 'Female'], size=size)
     assign_simulant_property(pop, 'sex', choose_random_sex)
-    pop['sex'].astype('category', copy=False)
+    pop['sex'] = pop['sex'].astype('category', copy=False)
 
 def assign_age_to_cohort(pop, cohort_age=0.0):
     pop['age'] = cohort_age
