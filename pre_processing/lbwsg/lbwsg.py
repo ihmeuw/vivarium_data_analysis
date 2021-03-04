@@ -252,7 +252,7 @@ def preprocess_gbd_data(df, draws=None, filter_terms=None, mean_draws_name=None)
     # Add 'sex' column and rename 'parameter' column, and convert to Categorical
     sex_id_to_sex = demography.get_sex_id_to_sex_map()
     df = df.join(sex_id_to_sex, on='sex_id').rename(columns={'parameter': 'lbwsg_category'})
-    df['sex'].cat.remove_unused_categories(inplace=True)
+    df['sex'] = df['sex'].cat.remove_unused_categories()
     df['lbwsg_category'] = df['lbwsg_category'].astype(get_lbwsg_category_dtype())
     
     # Find draw columns or filter to requested draws
@@ -273,8 +273,8 @@ def preprocess_gbd_data(df, draws=None, filter_terms=None, mean_draws_name=None)
             df = df.mean(axis=1).rename(mean_draws_name).to_frame()
         elif measure == 'relative_risk': # Take geometric mean of RR's
             df = np.exp(np.log(df).mean(axis=1)).rename(mean_draws_name).to_frame()
-    # Reshape draws to long and lbwsg category to wide
-    df = df.unstack('lbwsg_category').stack('draw')
+    # Reshape draws to long form
+    df = df.stack('draw').rename(measure)
     return df
 
 def preprocess_artifact_data(df):
@@ -376,8 +376,10 @@ class LBWSGDistribution:
     Class to assign and adjust birthweights and gestational ages of a simulated population.
     """
     def __init__(self, exposure_data):
-        # TODO: Should we NOT convert draws to long form since we want them wide for the CDF?
-        self.exposure_dist = convert_draws_to_long_form(exposure_data, name='prevalence')
+#         self.exposure_dist = convert_draws_to_long_form(exposure_data, name='prevalence')
+        # Use .to_frame() to keep column name 'prevalence' as level 0 in MultiIndex columns;
+        # Calling unstack() on the Series instead drops the name and makes the columns a simple Index.
+        self.exposure_dist = exposure_data.to_frame().unstack('lbwsg_category')
 #         self.exposure_dist.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
 #         self.cat_df = get_category_data_by_interval()
         cat_df = get_category_data()
@@ -386,9 +388,9 @@ class LBWSGDistribution:
         self.categories_by_interval = cat_df.set_index(['ga','bw'])['lbwsg_category']
 #         self.age_to_id = get_age_to_id_map(self.exposure_dist['age_group_id'].unique())
 
-#     def get_propensity_names(self):
-#         """Get the names of the propensities used by this object."""
-#         return ['lbwsg_category_propensity', 'ga_propensity', 'bw_propensity']
+    def get_propensity_names(self):
+        """Get the names of the propensities used by this object."""
+        return ['lbwsg_category_propensity', 'ga_propensity', 'bw_propensity']
 
     def assign_propensities(self, pop):
         """Assigns propensities relevant to this risk exposure to the population."""
@@ -404,28 +406,33 @@ class LBWSGDistribution:
 #         return age_groups
 
     def get_exposure_cdf(self):
-        # TODO: Perhaps move some of this to the preprocessing step, e.g. setting the index to
-        # everything except the prevalence column, and unstacking (or never stacking in the first place)
-        index_cols = self.exposure_dist.columns.difference(['prevalence']).to_list()
-        exposure_cdf = self.exposure_dist.set_index(index_cols).unstack('lbwsg_category').cumsum(axis=1)
+        """Returns the cumulative distribution function corresponding to the prevalences
+        in this object's exposure distribution. Categories are ordered numerically.
+        """
+#         # DONE: Perhaps move some of this to the preprocessing step, e.g. setting the index to
+#         # everything except the prevalence column, and unstacking (or never stacking in the first place)
+#         index_cols = self.exposure_dist.columns.difference(['prevalence']).to_list()
+#         exposure_cdf = self.exposure_dist.set_index(index_cols).unstack('lbwsg_category').cumsum(axis=1)
+        exposure_cdf = self.exposure_dist.loc[:,'prevalence'].cumsum(axis=1)
        # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
-        exposure_cdf = exposure_cdf.droplevel(['location_id','year_id']).droplevel(0, axis=1)
+        exposure_cdf = exposure_cdf.droplevel(['location_id','year_id'])
         return exposure_cdf
 
-    def get_exposure_cdf_for_population(self, pop):
-        exposure_cdf = self.get_exposure_cdf()
-        extra_index_cols = ['age_group_id', 'sex']
-        pop_exposure_cdf = (
-            pop[extra_index_cols]
-            .set_index(extra_index_cols, append=True)
-            .join(exposure_cdf)
-            .droplevel(extra_index_cols)
-            .reindex(pop.index)
-        )
-        return pop_exposure_cdf
+#     def get_exposure_cdf_for_population0(self, pop):
+#         exposure_cdf = self.get_exposure_cdf()
+#         extra_index_cols = ['age_group_id', 'sex']
+#         pop_exposure_cdf = (
+#             pop[extra_index_cols]
+#             .set_index(extra_index_cols, append=True)
+#             .join(exposure_cdf)
+#             .droplevel(extra_index_cols)
+#             .reindex(pop.index)
+#         )
+#         return pop_exposure_cdf
     
-    def get_exposure_cdf_for_population2(self, pop):
-        # TODO: Make this the version that actually gets used
+    def get_exposure_cdf_for_population(self, pop):
+        """Returns the cumulative distribution function for each simulant in a population."""
+        # DONE: Make this the version that actually gets used
         exposure_cdf = self.get_exposure_cdf()
 #         index_cols = exposure_cdf.index.names # Should be ['age_group_id', 'draw', 'sex'], but order not guaranteed
         extra_index_cols = ['age_group_id', 'sex']
@@ -434,19 +441,24 @@ class LBWSGDistribution:
         pop_exposure_cdf.rename_axis(columns=exposure_cdf.columns.name, inplace=True, copy=False)
         return pop_exposure_cdf
 
-    def get_exposure_cdf_for_population1(self, pop):
-        exposure_cdf = self.get_exposure_cdf()
-        age_sex_draw = pop[['age_group_id', 'sex']].reset_index('draw')[['age_group_id', 'draw', 'sex']]
-        pop_exposure_cdf = exposure_cdf.reindex(age_sex_draw)
-        pop_exposure_cdf.index = pop.index
-        return pop_exposure_cdf
+#     def get_exposure_cdf_for_population1(self, pop):
+#         exposure_cdf = self.get_exposure_cdf()
+#         age_sex_draw = pop[['age_group_id', 'sex']].reset_index('draw')[['age_group_id', 'draw', 'sex']]
+#         pop_exposure_cdf = exposure_cdf.reindex(age_sex_draw)
+#         pop_exposure_cdf.index = pop.index
+#         return pop_exposure_cdf
 
-    def assign_category_from_propensity(self, pop):
+    def assign_category_from_propensity(self, pop, category_column='lbwsg_category', inplace=True):
         # TODO: allow specifying the category column name, and add an option to not modify pop in place
         """Assigns LBWSG categories to the population based on simulant propensities."""
         pop_exposure_cdf = self.get_exposure_cdf_for_population(pop)
         lbwsg_cat = sample_from_propensity(pop['lbwsg_category_propensity'], pop_exposure_cdf.columns, pop_exposure_cdf)
-        pop['lbwsg_category'] = lbwsg_cat
+        lbwsg_cat = pd.Series(lbwsg_cat, index=pop.index, name=category_column, dtype=get_lbwsg_category_dtype())
+        if inplace:
+            pop[category_column] = lbwsg_cat
+            return pop
+        else:
+            return lbwsg_cat
 
     def assign_exposure(self, pop):
         """
@@ -465,7 +477,7 @@ class LBWSGDistribution:
 #             pop.loc[pop_mask, 'lbwsg_category'] = \
 #                 np.random.choice(cat_dist['lbwsg_category'], size=len(group), p=cat_dist['prevalence'])
 
-        self.assign_category_from_propensity(pop)
+        self.assign_category_from_propensity(pop, 'lbwsg_category')
         # Use propensities for ga and bw to assign a ga and bw within each category
         self.assign_ga_bw_from_propensities_within_cat(pop, 'lbwsg_category')
 
@@ -478,19 +490,22 @@ class LBWSGDistribution:
         pop['gestational_age'] = category_data['ga_start'] + pop['ga_propensity'] * category_data['ga_width']
         pop['birthweight'] = category_data['bw_start'] + pop['bw_propensity'] * category_data['bw_width']
 
+#     def get_category_data_for_population1(self, pop, category_column):
+#         """Returns a dataframe indexed by pop.index, where each row contains data about
+#         the corresponding simulant's LBWSG category.
+#         """
+#         interval_data = self.interval_data_by_category.loc[pop[category_column]]
+# #         return interval_data
+#         # This verifies that the correct population indexes will be assigned to the category data below
+#         assert pd.Series(interval_data.index, index=pop.index).equals(pop[category_column]), \
+#             'Categories misaligned with population index!'
+#         interval_data.index = pop.index
+#         return interval_data
+
     def get_category_data_for_population(self, pop, category_column):
-        """Returns a dataframe indexed by pop.index, where each row contains data about
-        the corresponding simulant's LBWSG category.
-        """
-        interval_data = self.interval_data_by_category.loc[pop[category_column]]
-        # This verifies that the correct population indexes will be assigned to the category data below
-        assert pd.Series(interval_data.index, index=pop.index).equals(pop[category_column]), \
-            'Categories misaligned with population index!'
-        interval_data.index = pop.index
-        return interval_data
-    
-    def get_category_data_for_population1(self, pop, category_column):
-        interval_data = pop.join(self.interval_data_by_category, on=category_column)
+        interval_data = (pop[[category_column]]
+                         .join(self.interval_data_by_category, on=category_column)
+                         .drop(columns=category_column))
         return interval_data
 
     def apply_birthweight_shift(self, pop, shift, bw_col='birthweight', ga_col='gestational_age',
@@ -557,7 +572,7 @@ class LBWSGRiskEffect:
         self.paf_data = paf_data
         
     def assign_relative_risk1(self, pop, cat_colname):
-        # TODO: Fix tthis because it doesn't work with GBD data - see version below
+        # DONE: Fix tthis because it doesn't work with GBD data - see version below
         # TODO: Figure out better method of dealing with category column name...
         cols_to_match = ['sex', 'age_start', 'draw', cat_colname]
         df = pop.reset_index().merge(
