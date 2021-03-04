@@ -8,6 +8,7 @@ https://github.com/ihmeuw/vivarium_public_health/blob/master/src/vivarium_public
 import pandas as pd, numpy as np
 import re
 from typing import Tuple#, Dict, Iterable
+from pandas.api.types import CategoricalDtype
 
 import demography
 # from demography import get_age_group_data, get_sex_id_map
@@ -115,6 +116,9 @@ CATEGORY_TO_MEID_GBD_2019 = {
 def get_lbwsg_category_order():
     """Returns LBWSG categories, sorted numerically."""
     return sorted(CATEGORY_TO_MEID_GBD_2019.keys(), key=lambda s: int(s.strip('cat')))
+
+def get_lbwsg_category_dtype():
+    return CategoricalDtype(categories=get_lbwsg_category_order(), ordered=True)
 
 def read_lbwsg_data_by_draw_from_gbd_2017_artifact(artifact_path, measure, draw, rename=None):
     """
@@ -245,10 +249,11 @@ def preprocess_gbd_data(df, draws=None, filter_terms=None, mean_draws_name=None)
     else:
         raise ValueError("Unexpected GBD LBWSG data format...")
 
-    # Add 'sex' column and rename 'parameter' column
+    # Add 'sex' column and rename 'parameter' column, and convert to Categorical
     sex_id_to_sex = demography.get_sex_id_to_sex_map()
     df = df.join(sex_id_to_sex, on='sex_id').rename(columns={'parameter': 'lbwsg_category'})
-    df['sex'].cat.remove_unused_categories()
+    df['sex'].cat.remove_unused_categories(inplace=True)
+    df['lbwsg_category'] = df['lbwsg_category'].astype(get_lbwsg_category_dtype())
     
     # Find draw columns or filter to requested draws
     if draws is None:
@@ -321,6 +326,7 @@ def get_category_descriptions(source='gbd_mapping'):
             .rename_axis('lbwsg_category').reset_index()
             .merge(descriptions) # merge on 'modelable_entity_id' if source=='get_ids', on 'lbwsg_category' if source=='gbd_mapping'
            )
+    cats['lbwsg_category'] = cats['lbwsg_category'].astype(get_lbwsg_category_dtype())
     return cats
 
 def get_category_data(source='gbd_mapping'):
