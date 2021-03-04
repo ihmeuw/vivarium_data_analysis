@@ -112,6 +112,10 @@ CATEGORY_TO_MEID_GBD_2019 = {
 # READING AND PROCESSING GBD DATA FOR LBWSG #
 ####################################################
 
+def get_lbwsg_category_order():
+    """Returns LBWSG categories, sorted numerically."""
+    return sorted(CATEGORY_TO_MEID_GBD_2019.keys(), key=lambda s: int(s.strip('cat')))
+
 def read_lbwsg_data_by_draw_from_gbd_2017_artifact(artifact_path, measure, draw, rename=None):
     """
     Reads one draw of LBWSG data from an artifact.
@@ -219,28 +223,54 @@ def rescale_prevalence(exposure):
     exposure.reset_index(inplace=True)
     return exposure
 
-def preprocess_gbd_data(df, draws=None):
+def preprocess_gbd_data(df, draws=None, filter_terms=None, mean_draws_name=None):
     """df can be exposure or rr data?
     Note that location_id for rr data will always be 1 (Global), so it won't
     match location_id for exposure data.
     """
-    # Note: walrus operator := requires Python 3.8 or higher
-    if 'cause_id' in df and len(cause_ids:=df['cause_id'].unique())>1:
-        # If df is RR data, filter to a single cause id - all affected causes have the same RR's
-        df = df.loc[df['cause_id']==cause_ids[0]]
-    elif 'measure_id' in df and list(df['measure_id'].unique()) == [5]: # measure_id 5 is Prevalence
-        # If df is exposure data, rescale prevalence
-        # TODO: Perhaps check if df contains NaN or sum of prevalence is not 1
-        df = rescale_prevalence(df)
+    # Filter data if requested
+    if filter_terms is not None:
+        query_string = " and ".join(filter_terms)
+        df = df.query(query_string)
 
+    # Determine what data we got and process accordingly
+    if 'cause_id' in df:
+        measure = 'relative_risk' # df is RR data
+        if len(cause_ids:=df['cause_id'].unique())>1: # Note: walrus operator := requires Python 3.8 or higher
+            # Filter to a single cause id - all affected causes have the same RR's
+            df = df.loc[df['cause_id']==cause_ids[0]]
+    elif 'measure_id' in df and list(df['measure_id'].unique()) == [5]: # measure_id 5 is Prevalence
+        measure = 'prevalence' # df is exposure data
+        df = rescale_prevalence(df) # Fix prevalence because GBD 2019 data was messed up
+    else:
+        raise ValueError("Unexpected GBD LBWSG data format...")
+
+    # Add 'sex' column and rename 'parameter' column
     sex_id_to_sex = demography.get_sex_id_to_sex_map()
     df = df.join(sex_id_to_sex, on='sex_id').rename(columns={'parameter': 'lbwsg_category'})
-    index_cols = ['location_id', 'year_id', 'sex', 'age_group_id', 'lbwsg_category']
+    df['sex'].cat.remove_unused_categories()
+    
+    # Find draw columns or filter to requested draws
     if draws is None:
         draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
     else:
         draw_cols = [f"draw_{i}" for i in draws]
-    return df.set_index(index_cols)[draw_cols]
+
+    # Set index columns and rename draw columns
+    index_cols = ['location_id', 'year_id', 'sex', 'age_group_id', 'lbwsg_category']
+    df = df.set_index(index_cols)[draw_cols]
+    df.columns = df.columns.str.replace('draw_', '').astype(int)
+    df.columns.rename('draw', inplace=True)
+    
+    # Take mean over draws if this was requested by specifying a name for the mean
+    if mean_draws_name is not None:
+        if measure == 'prevalence': # Take arithmetic mean of prevalence
+            df = df.mean(axis=1).rename(mean_draws_name).to_frame()
+        elif measure == 'relative_risk': # Take geometric mean of RR's
+            df = np.exp(np.log(df).mean(axis=1)).rename(mean_draws_name).to_frame()
+    # Reshape draws to long and lbwsg category to wide
+    df = df.unstack('lbwsg_category').stack('draw')
+    return df
 
 def preprocess_artifact_data(df):
     pass
@@ -520,7 +550,7 @@ class LBWSGRiskEffect:
 #         self.rr_data.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
         self.paf_data = paf_data
         
-    def assign_relative_risk(self, pop, cat_colname):
+    def assign_relative_risk1(self, pop, cat_colname):
         # TODO: Fix tthis because it doesn't work with GBD data - see version below
         # TODO: Figure out better method of dealing with category column name...
         cols_to_match = ['sex', 'age_start', 'draw', cat_colname]
@@ -529,6 +559,27 @@ class LBWSGRiskEffect:
         ).set_index(pop.index.names)
 #         return df
         pop['lbwsg_relative_risk'] = df['relative_risk']
+
+    def assign_relative_risk(self, pop, cat_colname='lbwsg_category', rr_colname='lbwsg_relative_risk', inplace=True):
+        rr_map = self.get_rr_mapper()
+        # Rename the category column so it matches that in the RR data
+#         extra_index_cols = ['age_group_id', 'sex', 'lbwsg_category']
+        if cat_colname != 'lbwsg_category':
+            pop_standardized = pop.rename(columns={cat_colname: 'lbwsg_category'})
+        else:
+            pop_standardized = pop
+        pop_rrs = pop_standardized.join(rr_map, on=rr_map.index.names)['relative_risk'].rename(rr_colname)
+#         pop_rrs = (
+#             pop[extra_index_cols]
+#             .join(rr_map, on=rr_map.index.names)
+#             .drop(columns=extra_index_cols)
+#             .squeeze().rename(rr_colname)
+#         )
+        if inplace:
+            pop[rr_colname] = pop_rrs
+            return pop
+        else:
+            return pop_rrs
 
     def get_relative_risks_for_populatation(self, pop, cat_colname):
         # TODO: Maybe this should just be called `assign_relative_risk`, with an option for inplace or not
