@@ -118,6 +118,9 @@ def get_lbwsg_category_order():
     return sorted(CATEGORY_TO_MEID_GBD_2019.keys(), key=lambda s: int(s.strip('cat')))
 
 def get_lbwsg_category_dtype():
+    """Gets the data type for LBWSG categories -
+    an ordered Catgorical with order determined by get_lbwsg_category_order().
+    """
     return CategoricalDtype(categories=get_lbwsg_category_order(), ordered=True)
 
 def read_lbwsg_data_by_draw_from_gbd_2017_artifact(artifact_path, measure, draw, rename=None):
@@ -376,77 +379,29 @@ class LBWSGDistribution:
     Class to assign and adjust birthweights and gestational ages of a simulated population.
     """
     def __init__(self, exposure_data):
-#         self.exposure_dist = convert_draws_to_long_form(exposure_data, name='prevalence')
+        """"exposure_data is assumed to be preprocessed using above functions."""
+        # TODO: Enable passing raw data and then sending to preprocess from the constructor.
         # Use .to_frame() to keep column name 'prevalence' as level 0 in MultiIndex columns;
         # Calling unstack() on the Series instead drops the name and makes the columns a simple Index.
         self.exposure_dist = exposure_data.to_frame().unstack('lbwsg_category')
-#         self.exposure_dist.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
-#         self.cat_df = get_category_data_by_interval()
         cat_df = get_category_data()
         cat_data_cols = ['ga_start', 'ga_end', 'bw_start', 'bw_end', 'ga_width', 'bw_width']
         self.interval_data_by_category = cat_df.set_index('lbwsg_category')[cat_data_cols]
         self.categories_by_interval = cat_df.set_index(['ga','bw'])['lbwsg_category']
-#         self.age_to_id = get_age_to_id_map(self.exposure_dist['age_group_id'].unique())
 
     def get_propensity_names(self):
         """Get the names of the propensities used by this object."""
         return ['lbwsg_category_propensity', 'ga_propensity', 'bw_propensity']
 
-    def assign_propensities(self, pop):
-        """Assigns propensities relevant to this risk exposure to the population."""
-        # TODO: Fix this to use the same propensities across draws
-        propensities = np.random.uniform(size=(len(pop),3))
-        pop['lbwsg_category_propensity'] = propensities[:,0] # Not actually used yet...
-        pop['ga_propensity'] = propensities[:,1]
-        pop['bw_propensity'] = propensities[:,2]
-
-#     def get_age_groups_for_population(self, pop):
-#         age_groups = self.age_to_id.reindex(pop['age'])
-#         age_groups.index = pop.index
-#         return age_groups
-
-    def get_exposure_cdf(self):
-        """Returns the cumulative distribution function corresponding to the prevalences
-        in this object's exposure distribution. Categories are ordered numerically.
+    def assign_exposure(self, pop):
         """
-#         # DONE: Perhaps move some of this to the preprocessing step, e.g. setting the index to
-#         # everything except the prevalence column, and unstacking (or never stacking in the first place)
-#         index_cols = self.exposure_dist.columns.difference(['prevalence']).to_list()
-#         exposure_cdf = self.exposure_dist.set_index(index_cols).unstack('lbwsg_category').cumsum(axis=1)
-        exposure_cdf = self.exposure_dist.loc[:,'prevalence'].cumsum(axis=1)
-       # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
-        exposure_cdf = exposure_cdf.droplevel(['location_id','year_id'])
-        return exposure_cdf
-
-#     def get_exposure_cdf_for_population0(self, pop):
-#         exposure_cdf = self.get_exposure_cdf()
-#         extra_index_cols = ['age_group_id', 'sex']
-#         pop_exposure_cdf = (
-#             pop[extra_index_cols]
-#             .set_index(extra_index_cols, append=True)
-#             .join(exposure_cdf)
-#             .droplevel(extra_index_cols)
-#             .reindex(pop.index)
-#         )
-#         return pop_exposure_cdf
-    
-    def get_exposure_cdf_for_population(self, pop):
-        """Returns the cumulative distribution function for each simulant in a population."""
-        # DONE: Make this the version that actually gets used
-        exposure_cdf = self.get_exposure_cdf()
-#         index_cols = exposure_cdf.index.names # Should be ['age_group_id', 'draw', 'sex'], but order not guaranteed
-        extra_index_cols = ['age_group_id', 'sex']
-        pop_exposure_cdf = pop[extra_index_cols].join(exposure_cdf, on=exposure_cdf.index.names)
-        pop_exposure_cdf.drop(columns=extra_index_cols, inplace=True)
-        pop_exposure_cdf.rename_axis(columns=exposure_cdf.columns.name, inplace=True, copy=False)
-        return pop_exposure_cdf
-
-#     def get_exposure_cdf_for_population1(self, pop):
-#         exposure_cdf = self.get_exposure_cdf()
-#         age_sex_draw = pop[['age_group_id', 'sex']].reset_index('draw')[['age_group_id', 'draw', 'sex']]
-#         pop_exposure_cdf = exposure_cdf.reindex(age_sex_draw)
-#         pop_exposure_cdf.index = pop.index
-#         return pop_exposure_cdf
+        Assign birthweights and gestational ages to each simulant in the population based on
+        this object's distribution.
+        """
+        # Based on simulant's age and sex, assign a random LBWSG category from GBD distribution
+        self.assign_category_from_propensity(pop, 'lbwsg_category')
+        # Use propensities for ga and bw to assign a ga and bw within each category
+        self.assign_ga_bw_from_propensities_within_cat(pop, 'lbwsg_category')
 
     def assign_category_from_propensity(self, pop, category_column='lbwsg_category', inplace=True):
         # TODO: allow specifying the category column name, and add an option to not modify pop in place
@@ -460,26 +415,24 @@ class LBWSGDistribution:
         else:
             return lbwsg_cat
 
-    def assign_exposure(self, pop):
-        """
-        Assign birthweights and gestational ages to each simulant in the population based on
-        this object's distribution.
-        """
-        # Based on simulant's age and sex, assign a random LBWSG category from GBD distribution
-        # Index levels: location  sex  age_start  age_end   year_start  year_end  parameter
-#         idxs = []
-#         for (draw, sex, age_group_id), group in pop.groupby(['draw', 'sex', 'age_group_id'], observed=True):
-#             exposure_mask = (self.exposure_dist.draw==draw) & (self.exposure_dist.sex==sex) & (self.exposure_dist.age_group_id==age_group_id)
-#             cat_dist = self.exposure_dist.loc[exposure_mask]
-# #             cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
-#             pop_mask = (pop.sex == sex) & (pop.age_group_id == age_group_id) & (pop.index.get_level_values('draw') == draw)
-# #             pop.loc[group.index, 'lbwsg_category'] = \ # This line is really slow!!!
-#             pop.loc[pop_mask, 'lbwsg_category'] = \
-#                 np.random.choice(cat_dist['lbwsg_category'], size=len(group), p=cat_dist['prevalence'])
+    def get_exposure_cdf_for_population(self, pop):
+        """Returns the cumulative distribution function for each simulant in a population."""
+        exposure_cdf = self.get_exposure_cdf()
+        # index_cols = exposure_cdf.index.names # Should be ['age_group_id', 'draw', 'sex'], but order not guaranteed
+        extra_index_cols = ['age_group_id', 'sex']
+        pop_exposure_cdf = pop[extra_index_cols].join(exposure_cdf, on=exposure_cdf.index.names)
+        pop_exposure_cdf.drop(columns=extra_index_cols, inplace=True)
+        pop_exposure_cdf.rename_axis(columns=exposure_cdf.columns.name, inplace=True, copy=False)
+        return pop_exposure_cdf
 
-        self.assign_category_from_propensity(pop, 'lbwsg_category')
-        # Use propensities for ga and bw to assign a ga and bw within each category
-        self.assign_ga_bw_from_propensities_within_cat(pop, 'lbwsg_category')
+    def get_exposure_cdf(self):
+        """Returns the cumulative distribution function corresponding to the prevalences
+        in this object's exposure distribution. Categories are ordered numerically.
+        """
+        exposure_cdf = self.exposure_dist.loc[:,'prevalence'].cumsum(axis=1)
+       # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
+        exposure_cdf = exposure_cdf.droplevel(['location_id','year_id'])
+        return exposure_cdf
 
     def assign_ga_bw_from_propensities_within_cat(self, pop, category_column):
         """Assigns birthweights and gestational ages using propensities.
@@ -489,18 +442,6 @@ class LBWSGDistribution:
         category_data = self.get_category_data_for_population(pop, category_column)
         pop['gestational_age'] = category_data['ga_start'] + pop['ga_propensity'] * category_data['ga_width']
         pop['birthweight'] = category_data['bw_start'] + pop['bw_propensity'] * category_data['bw_width']
-
-#     def get_category_data_for_population1(self, pop, category_column):
-#         """Returns a dataframe indexed by pop.index, where each row contains data about
-#         the corresponding simulant's LBWSG category.
-#         """
-#         interval_data = self.interval_data_by_category.loc[pop[category_column]]
-# #         return interval_data
-#         # This verifies that the correct population indexes will be assigned to the category data below
-#         assert pd.Series(interval_data.index, index=pop.index).equals(pop[category_column]), \
-#             'Categories misaligned with population index!'
-#         interval_data.index = pop.index
-#         return interval_data
 
     def get_category_data_for_population(self, pop, category_column):
         interval_data = (pop[[category_column]]
@@ -567,22 +508,13 @@ class LBWSGDistribution:
 
 class LBWSGRiskEffect:
     def __init__(self, rr_data, paf_data=None):
-#         self.rr_data = convert_draws_to_long_form(rr_data, name='relative_risk')
-#         self.rr_data.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
+        """"rr_data is assumed to be preprocessed using above functions."""
+        # TODO: Enable passing raw data and then sending to preprocess from the constructor.
         self.rr_data = rr_data
         self.paf_data = paf_data
-        
-    def assign_relative_risk1(self, pop, cat_colname):
-        # DONE: Fix tthis because it doesn't work with GBD data - see version below
-        # TODO: Figure out better method of dealing with category column name...
-        cols_to_match = ['sex', 'age_start', 'draw', cat_colname]
-        df = pop.reset_index().merge(
-            self.rr_data.rename(columns={'lbwsg_category': cat_colname}), on=cols_to_match
-        ).set_index(pop.index.names)
-#         return df
-        pop['lbwsg_relative_risk'] = df['relative_risk']
 
     def assign_relative_risk(self, pop, cat_colname='lbwsg_category', rr_colname='lbwsg_relative_risk', inplace=True):
+        """Assign relative risks to a population based on their lbwsg_category."""
         rrs_by_category = self.get_relative_risks_by_category()
         # Filter population to relevant columns to avoid potential column name collisions
         extra_index_cols = ['sex', 'age_group_id', cat_colname] # columns to match besides draw, which is in pop.index
@@ -590,34 +522,16 @@ class LBWSGRiskEffect:
         # Rename the category column so it matches that in the RR data
         if cat_colname != 'lbwsg_category':
             pop_data = pop_data.rename(columns={cat_colname: 'lbwsg_category'})
-
+        # Get relative risk for each row of pop
         pop_rrs = pop_data.join(rrs_by_category, on=rrs_by_category.index.names)['relative_risk'].rename(rr_colname)
-#         pop_rrs = (
-#             pop[extra_index_cols]
-#             .join(rr_map, on=rr_map.index.names)
-#             .drop(columns=extra_index_cols)
-#             .squeeze().rename(rr_colname)
-#         )
         if inplace:
             pop[rr_colname] = pop_rrs
             return pop
         else:
             return pop_rrs
 
-    def get_relative_risks_for_populatation(self, pop, cat_colname):
-        # TODO: Maybe this should just be called `assign_relative_risk`, with an option for inplace or not
-        rr_map = self.get_relative_risks_by_category()
-        # Rename the category column so it matches that in the RR data
-        extra_index_cols = ['age_group_id', 'sex', 'lbwsg_category']
-        pop = pop.rename(columns={cat_colname: 'lbwsg_category'})[extra_index_cols]
-        pop_rrs = pop.join(rr_map, on=rr_map.index.names).drop(columns=extra_index_cols)
-        return pop_rrs
-
     def get_relative_risks_by_category(self):
-#         # DONE: Set the correct index in preprocessing instead of here, and perhaps just have this function
-#         # drop the location and year levels. Also, rename this function to somthing better.
-#         index_cols = self.rr_data.columns.difference(['relative_risk']).to_list()
-#         rr_map = self.rr_data.set_index(index_cols)
+        """Get relative risks indexed by age_group_id, sex, draw, and lbwsg_category."""
        # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
         return self.rr_data.droplevel(['location_id','year_id'])#.droplevel(0, axis=1)
 
