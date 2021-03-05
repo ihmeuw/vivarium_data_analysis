@@ -13,8 +13,8 @@ def create_bw_dose_response_distribution():
     Effect size comes from Haider et al. (2013)
     """
     # mean and 0.975-quantile of normal distribution for mean difference (MD)
-    mean = 15.1 # g per 10 mg daily iron
-    q_975 = 24.2 # 97.5th percentile
+    mean = 16.7 # g per 10 mg daily iron
+    q_975 = 26.11 # 97.5th percentile
     std = prob_utils.normal_stdev_from_mean_quantile(mean, q_975, 0.975)
     # Frozen normal distribution for MD, representing uncertainty in our effect size
     return stats.norm(mean, std)
@@ -42,8 +42,11 @@ def get_iron_concentration(location, draws):
     """
     if location == 'India':
         iron_conc_dist = stats.uniform(loc=14, scale=21.5-14), # Uniform(14,21.5) mg iron as NaFeEDTA per kg flour
-        iron_concentration = pd.Series(
-            iron_conc_dist.rvs(size=len(draws)), index=draws, name='iron_concentration')
+        if len(draws) == 1:
+            iron_concentration = iron_conc_dist.mean()
+        else:
+            iron_concentration = pd.Series(
+                iron_conc_dist.rvs(size=len(draws)), index=draws, name='iron_concentration')
     elif location == 'Ethiopia':
         iron_concentration = 30 # 30 mg iron as NaFeEDTA per kg flour
     elif location == 'Nigeria':
@@ -116,8 +119,11 @@ def get_global_data(draws):
     """
     draws = pd.Index(draws, dtype='int64', name='draw')
     bw_dose_response_distribution = create_bw_dose_response_distribution()
+#     if len(draws) == 1:
+#         birthweight_dose_response = bw_dose_response_distribution.mean()
+#     else:
     birthweight_dose_response = pd.Series(
-        bw_dose_response_distribution.rvs(size=len(draws)),
+        bw_dose_response_distribution.rvs(size=len(draws)) if len(draws)>1 else bw_dose_response_distribution.mean(),
         index=draws,
         name='birthweight_dose_response'
     )
