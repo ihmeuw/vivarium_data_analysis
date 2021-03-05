@@ -584,6 +584,7 @@ class LBWSGRiskEffect:
 
 class LBWSGRiskEffectInterp2d:
     def __init__(self, rr_data, paf_data=None):
+        """"rr_data is assumed to be preprocessed using above functions."""
         self.rr_data = rr_data
         self.paf_data = paf_data
         self.log_rr = np.log(self.rr_data.unstack('lbwsg_category').droplevel(['location_id', 'year_id']))
