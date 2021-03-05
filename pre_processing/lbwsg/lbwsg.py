@@ -9,6 +9,7 @@ import pandas as pd, numpy as np
 import re
 from typing import Tuple#, Dict, Iterable
 from pandas.api.types import CategoricalDtype
+from scipy.interpolate import interp2d
 
 import demography
 # from demography import get_age_group_data, get_sex_id_map
@@ -550,3 +551,54 @@ class LBWSGRiskEffect:
             self.paf_data = paf
         return paf
 
+class LBWSGRiskEffectInterp2d:
+    def __init__(self, rr_data, paf_data=None):
+        self.rr_data = rr_data
+        self.paf_data = paf_data
+        self.log_rr = np.log(self.rr_data.unstack('lbwsg_category').droplevel(['location_id', 'year_id']))
+        self.log_rr_splines = self.generate_logspace_splines()
+
+    def generate_logspace_splines(self):
+        interval_data_by_cat = get_category_data().set_index('lbwsg_category')
+        x = interval_data_by_cat['bw_midpoint']
+        y = interval_data_by_cat['ga_midpoint']
+        assert x.index.equals(self.log_rr.columns) and y.index.equals(self.log_rr.columns)
+
+        def make_spline(z):
+            # z will be a row of self.log_rr
+            # Reindex z to make sure categories are aligned with x
+            return interp2d(x,y,z.reindex(x.index, copy=False), kind='linear', bounds_error=False, fill_value=None)
+
+        log_rr_splines = self.log_rr.apply(make_spline, axis='columns').rename('log_rr_spline')
+        return log_rr_splines
+
+    def get_splines_for_population(self, pop):
+        extra_index_cols = ['age_group_id', 'sex']
+        pop_splines = (
+            pop[extra_index_cols]
+            .join(self.log_rr_splines, on=self.log_rr_splines.index.names)
+            .drop(columns=extra_index_cols)
+        )
+        return pop_splines
+
+    def assign_relative_risk(self, pop, rr_colname='interpolated_lbwsg_relative_risk', inplace=True):
+        pop_log_rr_splines = self.get_splines_for_population(pop)
+
+        def evaluate_spline(row):
+            # 'log_rr_spline' = pop_log_rr_splines.name, if pop_log_rr_splines were a Series
+            return row['log_rr_spline'](row['birthweight'], row['gestational_age'])
+
+        # [['birthweight','gestational_age']]
+        log_rr = (
+            pop[['birthweight','gestational_age']]
+            .join(pop_log_rr_splines)
+            .apply(evaluate_spline, axis=1)
+            .astype(float)
+        )
+
+        rr = np.exp(log_rr).rename(rr_colname)
+        if inplace:
+            pop[rr_colname] = rr
+            return pop
+        else:
+            return rr
