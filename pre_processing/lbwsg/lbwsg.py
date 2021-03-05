@@ -352,6 +352,37 @@ def get_category_data(source='gbd_mapping'):
     cat_df['bw'], cat_df['bw_width'], cat_df['bw_midpoint'] = interval_width_midpoint(cat_df.bw_start, cat_df.bw_end)
     return cat_df
 
+def get_category_neighbors(cat_df=None):
+    """Returns a dataframe indexed by LBWSG category, with each row showing the 4 neighboring categories.
+    Also contains a boolean column indicating whether the category is on the boundary of the support
+    of the exposure distribution.
+    If a category is on the boundary, its nonexistent neighbor categories are filled with NaN.
+    """
+    if cat_df is None:
+        cat_df = get_category_data()
+    # Choose shift values that are smaller than the width of any category to ensure shifts land in the interior
+    ga_shift = 0.5 # < 1
+    bw_shift = 100 # < 500
+    # Get coordinates past the boundary of each category in each of the four directions
+    ga_up = pd.Index(zip(cat_df['ga_end']+ga_shift, cat_df['bw_midpoint']))
+    ga_down = pd.Index(zip(cat_df['ga_start']-ga_shift, cat_df['bw_midpoint']))
+    bw_up = pd.Index(zip(cat_df['ga_midpoint'], cat_df['bw_end']+bw_shift))
+    bw_down = pd.Index(zip(cat_df['ga_midpoint'], cat_df['bw_start']-bw_shift))
+    
+    # Get a map from intervals to categories
+    cats_by_interval = cat_df.set_index(['ga','bw'])['lbwsg_category']
+
+    # Use .reindex to look up the category for the coordinates in each of the four directions
+    cat_neighbors = cat_df.set_index('lbwsg_category')[[]]
+    cat_neighbors['ga_up'] = cats_by_interval.reindex(ga_up).array
+    cat_neighbors['ga_down'] = cats_by_interval.reindex(ga_down).array
+    cat_neighbors['bw_up'] = cats_by_interval.reindex(bw_up).array
+    cat_neighbors['bw_down'] = cats_by_interval.reindex(bw_down).array
+    # Record whether thee category is on the boundary of the support of the distribution
+    cat_neighbors['on_boundary'] = cat_neighbors.isna().any(axis=1)
+    
+    return cat_neighbors
+
 ##########################################################
 # CLASS FOR LBWSG RISK DISTRIBUTION #
 ##########################################################
