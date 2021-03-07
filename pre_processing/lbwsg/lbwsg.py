@@ -268,15 +268,16 @@ def preprocess_gbd_data(df, draws=None, filter_terms=None, mean_draws_name=None)
     # Set index columns and rename draw columns
     index_cols = ['location_id', 'year_id', 'sex', 'age_group_id', 'lbwsg_category']
     df = df.set_index(index_cols)[draw_cols]
-    df.columns = df.columns.str.replace('draw_', '').astype(int)
-    df.columns.rename('draw', inplace=True)
+    df.columns = df.columns.str.replace('draw_', '').astype(int).rename('draw')
+#     df.columns.rename('draw', inplace=True)
     
     # Take mean over draws if this was requested by specifying a name for the mean
     if mean_draws_name is not None:
         if measure == 'prevalence': # Take arithmetic mean of prevalence
-            df = df.mean(axis=1).rename(mean_draws_name).to_frame()
+            df = df.mean(axis=1).rename(mean_draws_name).to_frame().rename_axis(columns='draw')
         elif measure == 'relative_risk': # Take geometric mean of RR's
-            df = np.exp(np.log(df).mean(axis=1)).rename(mean_draws_name).to_frame()
+            df = np.exp(np.log(df).mean(axis=1)).rename(mean_draws_name).to_frame().rename_axis(columns='draw')
+#             df = df.mean(axis=1).rename(mean_draws_name).to_frame().rename_axis(columns='draw')
     # Reshape draws to long form
     df = df.stack('draw').rename(measure)
     return df
@@ -382,6 +383,29 @@ def get_category_neighbors(cat_df=None):
     cat_neighbors['on_boundary'] = cat_neighbors.isna().any(axis=1)
     
     return cat_neighbors
+
+def get_relative_risk_set_by_category(rr_data, draw=0, age_group_id=2, sex='Female', location_id=1, year_id=2019, take_mean=False):
+    """rr_data is assumed to be GBD's LBWSG RR data returned by get_draws.
+    `draw` should be a single draw if take_mean=False; otherwise `draw` should be an iterable of draws
+    over which to compute the mean relative risk.
+    """
+    if take_mean:
+        draws = draw # Draws should be a list of draws in this case
+        draw = mean_draws_name = 'mean' # This will be the single value of the `draw` level in preprocessed rr's index
+    else:
+        draws = [draw]
+        mean_draws_name = None
+#     if mean_draws_name is None:
+#         draws = [draw]
+#     else: 
+#         draws = draw
+#         draw = mean_draw_name # This will be the name of the mean
+    rr_data = preprocess_gbd_data(rr_data, draws=draws, mean_draws_name=mean_draws_name)
+    rr_data = rr_data.xs(
+        (location_id, year_id, sex, age_group_id, draw),
+        level=('location_id', 'year_id', 'sex','age_group_id','draw')
+    ).sort_index()
+    return rr_data
 
 ##########################################################
 # CLASS FOR LBWSG RISK DISTRIBUTION #
