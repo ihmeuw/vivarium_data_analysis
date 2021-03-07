@@ -30,7 +30,7 @@ def create_test_population(draws=None, sex='Female', age=1/365):
     test_pop['birthweight'] = cat_df['bw_midpoint'].array
     return test_pop
 
-def check_interpolated_rrs(rr_data, rr_interpolator_class=lbwsg.LBWSGRiskEffectInterp2d, draws=None, tolerance=0.01):
+def check_interpolated_rrs(rr_data, rr_interpolator_class=lbwsg.LBWSGRiskEffectInterp2d, test_pop=None, draws=None, tolerance=0.01):
     """rr_data is assumed to be relative risk data for LBWSG returned by get_draws"""
     if draws is None:
         draws = [0]
@@ -38,7 +38,8 @@ def check_interpolated_rrs(rr_data, rr_interpolator_class=lbwsg.LBWSGRiskEffectI
     lbwsg_effect = lbwsg.LBWSGRiskEffect(rr_preprocessed)
     lbwsg_rr_interp = rr_interpolator_class(rr_preprocessed)
     
-    test_pop = create_test_population(draws=draws)
+    if test_pop is None:
+        test_pop = create_test_population(draws=draws)
     lbwsg_effect.assign_relative_risk(test_pop, rr_colname='lbwsg_relative_risk')
     lbwsg_rr_interp.assign_relative_risk(test_pop, rr_colname='interpolated_lbwsg_relative_risk')
     
