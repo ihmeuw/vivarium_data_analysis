@@ -65,7 +65,8 @@ class IronBirthweightCalculator:
     
     treated_lbwsg_rr_colname = 'treated_lbwsg_rr'
 
-    def __init__(self, location, artifact_path, year, draws, take_mean=False, random_seed=None):
+    def __init__(self, location, artifact_path, year, draws,
+                 take_mean=False, risk_effect_class=lbwsg.LBWSGRiskEffect, random_seed=None):
         """
         """
         # Save input parameters so we can look them up later if necessary/desired
@@ -76,6 +77,7 @@ class IronBirthweightCalculator:
         
         # TODO: Perhaps create and save a numpy random generator, and share it via global_data
         # random_generator = np.random.default_rng(random_seed) # Now do something with this...
+        np.random.seed(random_seed)
         
 #         if take_mean:
 #             mean_draws_name = f'mean_of_{len(draws)}_draws'
@@ -113,7 +115,7 @@ class IronBirthweightCalculator:
 
         # Create model components
         self.lbwsg_distribution = LBWSGDistribution(exposure_data)
-        self.lbwsg_effect = LBWSGRiskEffect(rr_data, paf_data=None) # We don't need PAFs to initialize the pop tables with RR's
+        self.lbwsg_effect = risk_effect_class(rr_data, paf_data=None) # We don't need PAFs to initialize the pop tables with RR's
 
 #         self.baseline_fortification = IronFortificationIntervention(location, baseline_coverage, baseline_coverage)
 #         self.intervention_fortification = IronFortificationIntervention(location, baseline_coverage, intervention_coverage)
@@ -154,7 +156,7 @@ class IronBirthweightCalculator:
     def assign_lbwsg_exposure(self):
         # Assign baseline exposure - ideally this would be done with a propensity to share between scenarios,
         # but that's more complicated to implement, so I'll just copy the table after assigning lbwsg exposure.
-        self.lbwsg_distribution.assign_exposure(self.baseline_pop)
+        self.lbwsg_distribution.assign_exposure(self.baseline_pop, category_col='lbwsg_category')
         self.intervention_pop = self.baseline_pop.copy() # Hack to deal with slow assign_exposure function
         
     def assign_iron_treatment_deleted_birthweights(self):  
@@ -182,8 +184,14 @@ class IronBirthweightCalculator:
     def assign_lbwsg_relative_risks(self):
         # Compute the LBWSG relative risks in both scenarios - these will be used to compute the PIF
         # TODO: Maybe have lbwsg return the RR values instead, and assign them to the appropriate column here
-        self.lbwsg_effect.assign_relative_risk(self.baseline_pop, cat_colname='treated_lbwsg_cat')
-        self.lbwsg_effect.assign_relative_risk(self.intervention_pop, cat_colname='treated_lbwsg_cat')
+        if type(self.lbwsg_effect) == lbwsg.LBWSGRiskEffect:
+            self.lbwsg_effect.assign_relative_risk(self.baseline_pop, cat_colname='treated_lbwsg_category')
+            self.lbwsg_effect.assign_relative_risk(self.intervention_pop, cat_colname='treated_lbwsg_category')
+        else:
+            self.lbwsg_effect.assign_relative_risk(
+                self.baseline_pop, bw_colname='treated_treatment_deleted_birthweight')
+            self.lbwsg_effect.assign_relative_risk(
+                self.intervention_pop, bw_colname='treated_treatment_deleted_birthweight')
 
 #         return namedtuple('InitPopTables', 'baseline, iron_fortification')(baseline_pop, intervention_pop)
     
