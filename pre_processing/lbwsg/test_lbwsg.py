@@ -39,8 +39,8 @@ def check_interpolated_rrs(rr_data, rr_interpolator_class=lbwsg.LBWSGRiskEffectI
     lbwsg_rr_interp = rr_interpolator_class(rr_preprocessed)
     
     test_pop = create_test_population(draws=draws)
-    lbwsg_effect.assign_relative_risk(test_pop)
-    lbwsg_rr_interp.assign_relative_risk(test_pop)
+    lbwsg_effect.assign_relative_risk(test_pop, rr_colname='lbwsg_relative_risk')
+    lbwsg_rr_interp.assign_relative_risk(test_pop, rr_colname='interpolated_lbwsg_relative_risk')
     
     # Or use np.allclose with specified rtol and atol...
     test_pop[f"delta_rr_more_than_{tolerance:.2e}"] = (
