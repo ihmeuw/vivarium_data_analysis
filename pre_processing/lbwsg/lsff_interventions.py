@@ -42,7 +42,9 @@ def get_iron_concentration(location, draws):
     """
     if location == 'India':
         iron_conc_dist = stats.uniform(loc=14, scale=21.5-14), # Uniform(14,21.5) mg iron as NaFeEDTA per kg flour
-        if len(draws) == 1:
+#         if take_mean: # we'd have to pass another argument
+#         if isinstance(draws, pd.CategoricalIndex): # We used a categorical index if we took the mean over draws
+        if len(draws) == 1: # Use our best guess if there's only one draw or we took the mean
             iron_concentration = iron_conc_dist.mean()
         else:
             iron_concentration = pd.Series(
@@ -108,27 +110,35 @@ def get_flour_coverage_df():
     # Eventually, this will need to be updated to incorporate data from more countries.
     return lsff_plots.get_coverage_dfs()['flour'].T
 
-def get_global_data(draws):
+def get_global_data(draws, mean_draws_name=None):
     """
     Information shared between locations and scenarios. May vary by draw.
     
     Returns
     -------
-    draws
+    draw_numbers
+    draws - a pandas Index object
     dose-response of birthweight for iron (g per additional 10mg iron per day)
     """
-    draws = pd.Index(draws, dtype='int64', name='draw')
+    draw_numbers = draws # Save original values in case we take the mean over draws
+    take_mean = mean_draws_name is not None
+    if take_mean:
+        draws = pd.CategoricalIndex([mean_draws_name], name='draw') # Use the single mean value as the only "draw"
+    else:
+        draws = pd.Index(draws, dtype='int64', name='draw')
+
     bw_dose_response_distribution = create_bw_dose_response_distribution()
-#     if len(draws) == 1:
+#     if len(draws)==1:
 #         birthweight_dose_response = bw_dose_response_distribution.mean()
 #     else:
+    # Use our best guess if there's only one draw or we took the mean
     birthweight_dose_response = pd.Series(
         bw_dose_response_distribution.rvs(size=len(draws)) if len(draws)>1 else bw_dose_response_distribution.mean(),
         index=draws,
         name='birthweight_dose_response'
     )
-    GlobalIronFortificationData = namedtuple('GlobalIronFortificationData', "draws, birthweight_dose_response")
-    return GlobalIronFortificationData(draws, birthweight_dose_response)
+    GlobalIronFortificationData = namedtuple('GlobalIronFortificationData', "draw_numbers, draws, birthweight_dose_response")
+    return GlobalIronFortificationData(draw_numbers, draws, birthweight_dose_response)
 
 def get_local_data(location, global_data):
     """
@@ -151,7 +161,7 @@ def get_local_data(location, global_data):
         global_data.birthweight_dose_response, # indexed by draw
         iron_concentration, # scalar or indexed by draw
         mean_daily_flour # scalar
-    )
+    ) # returns a Series since global_data.birthweight_dose_response is a Series
     mean_birthweight_shift.rename('mean_birthweight_shift', inplace=True)
     # Load flour coverage data
     # TODO: For now these are scalars, but we can easily add samples from beta distributions indexed by draw
@@ -228,7 +238,7 @@ class IronFortificationIntervention:
         Assumes `assign_propensities` and `assign_treatment_deleted_birthweight` have already been called on pop.
         """
         pop['mother_is_iron_fortified'] = pop['iron_fortification_propensity'] < target_coverage
-        # TODO: Can this line be rewritten to avoid sampling flour consumption for rows that will get set to 0?
+        # DONE: Can this line be rewritten to avoid sampling flour consumption for rows that will get set to 0?
         # Yes, initialize the column with pop['mother_is_iron_fortified'].astype(float),
         # then index to the relevant rows and reassign.
         # NOTE: If we want to compare intervention to baseline by simulant, we can't sample flour consumption
