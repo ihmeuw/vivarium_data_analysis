@@ -450,24 +450,24 @@ class LBWSGDistribution:
         """Get the names of the propensities used by this object."""
         return ['lbwsg_category_propensity', 'ga_propensity', 'bw_propensity']
 
-    def assign_exposure(self, pop):
+    def assign_exposure(self, pop, category_col='lbwsg_category', bw_col='birthweight', ga_col='gestational_age'):
         """
         Assign birthweights and gestational ages to each simulant in the population based on
         this object's distribution.
         """
         # Based on simulant's age and sex, assign a random LBWSG category from GBD distribution
-        self.assign_category_from_propensity(pop, 'lbwsg_category')
+        self.assign_category_from_propensity(pop, category_col)
         # Use propensities for ga and bw to assign a ga and bw within each category
-        self.assign_ga_bw_from_propensities_within_cat(pop, 'lbwsg_category')
+        self.assign_ga_bw_from_propensities_within_cat(pop, category_col, bw_col, ga_col)
 
-    def assign_category_from_propensity(self, pop, category_column='lbwsg_category', inplace=True):
+    def assign_category_from_propensity(self, pop, category_col='lbwsg_category', inplace=True):
         # TODO: allow specifying the category column name, and add an option to not modify pop in place
         """Assigns LBWSG categories to the population based on simulant propensities."""
         pop_exposure_cdf = self.get_exposure_cdf_for_population(pop)
         lbwsg_cat = sample_from_propensity(pop['lbwsg_category_propensity'], pop_exposure_cdf.columns, pop_exposure_cdf)
-        lbwsg_cat = pd.Series(lbwsg_cat, index=pop.index, name=category_column, dtype=get_lbwsg_category_dtype())
+        lbwsg_cat = pd.Series(lbwsg_cat, index=pop.index, name=category_col, dtype=get_lbwsg_category_dtype())
         if inplace:
-            pop[category_column] = lbwsg_cat
+            pop[category_col] = lbwsg_cat
             return pop
         else:
             return lbwsg_cat
@@ -491,14 +491,15 @@ class LBWSGDistribution:
         exposure_cdf = exposure_cdf.droplevel(['location_id','year_id'])
         return exposure_cdf
 
-    def assign_ga_bw_from_propensities_within_cat(self, pop, category_column):
+    def assign_ga_bw_from_propensities_within_cat(self, pop, category_col='lbwsg_category',
+                                                  bw_col='birthweight', ga_col='gestational_age'):
         """Assigns birthweights and gestational ages using propensities.
         If the propensities are uniformly distributed in [0,1], the birthweights and gestational ages
         will be uniformly distributed within each LBWSG category.
         """
-        category_data = self.get_category_data_for_population(pop, category_column)
-        pop['gestational_age'] = category_data['ga_start'] + pop['ga_propensity'] * category_data['ga_width']
-        pop['birthweight'] = category_data['bw_start'] + pop['bw_propensity'] * category_data['bw_width']
+        category_data = self.get_category_data_for_population(pop, category_col)
+        pop[ga_col] = category_data['ga_start'] + pop['ga_propensity'] * category_data['ga_width']
+        pop[bw_col] = category_data['bw_start'] + pop['bw_propensity'] * category_data['bw_width']
 
     def get_category_data_for_population(self, pop, category_column):
         interval_data = (pop[[category_column]]
@@ -625,6 +626,9 @@ class LBWSGRiskEffectInterp2d:
             # z will be a row of self.log_rr
             # Reindex z to make sure categories are aligned with x... shouldn't be necessary if above assert statement passes
             # Setting bounds_error=False, fill_value=None will extrapolate by nearest neighbor for out of bounds
+#             print(x)
+#             print(y)
+#             print(z)
             return interp2d(x,y,z.reindex(x.index, copy=False), kind='linear', bounds_error=False, fill_value=None)
 
         log_rr_splines = self.log_rr.apply(make_spline, axis='columns').rename('log_rr_spline')
@@ -639,25 +643,29 @@ class LBWSGRiskEffectInterp2d:
         )
         return pop_splines
 
-    def assign_relative_risk(self, pop, rr_colname='lbwsg_relative_risk', inplace=True):
+    def assign_relative_risk(self, pop, bw_colname='birthweight', ga_colname='gestational_age', rr_colname='lbwsg_relative_risk', inplace=True):
+        # NOTE: cat_colname is ignored - I included it as a hack to have the same function signature for both classes...
         pop_log_rr_splines = self.get_splines_for_population(pop)
 
         def evaluate_spline(row):
             # 'log_rr_spline' = pop_log_rr_splines.name, if pop_log_rr_splines were a Series
-            return row['log_rr_spline'](row['birthweight'], row['gestational_age'])
+            return row['log_rr_spline'](row[bw_colname], row[ga_colname])
 
         # [['birthweight','gestational_age']]
         log_rr = (
-            pop[['birthweight','gestational_age']]
+            pop[[bw_colname, ga_colname]]
             .join(pop_log_rr_splines)
             .apply(evaluate_spline, axis=1)
             .astype(float)
         )
-        # Make sure log RR's are nonnegative so RR's will be >=1
-        # In theory we shouldn't have to do this, but for some reason the splines were giving some negative values
-        np.clip(log_rr, a_min=0, a_max=None, out=log_rr)
+        # Make sure log RR's are nonnegative so RR's will be >=1,
+        # and that they aren't too large, which will cause overflow.
+        # In theory we shouldn't have to do this, but for some reason the splines were giving some negative values,
+        # and also giving values up to about 4200(!!), even though the log RR's should be < 7.4
+        log_rr = np.clip(log_rr, a_min=0, a_max=7.5)
 
         rr = np.exp(log_rr).rename(rr_colname)
+#         rr = log_rr.rename(rr_colname)
         if inplace:
             pop[rr_colname] = rr
             return pop
