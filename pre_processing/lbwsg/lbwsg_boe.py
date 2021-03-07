@@ -1,12 +1,16 @@
 import pandas as pd, numpy as np
 from collections import namedtuple
 
-import lbwsg, lsff_interventions
+import demography, lbwsg, lsff_interventions
 from lbwsg import LBWSGDistribution, LBWSGRiskEffect
 from lsff_interventions import IronFortificationIntervention
 
+import sys, os.path
+sys.path.append(os.path.abspath("../.."))
+from preprocessing import id_helper
+
 # Class to store and name the arguments passed to main()
-ParsedArgs = namedtuple('ParsedArgs', "location, artifact_path, year, draws, take_mean, num_simulants")
+ParsedArgs = namedtuple('ParsedArgs', "location, artifact_path, year, draws, take_mean, random_seed, num_simulants")
 
 def initialize_population_table(draws, num_simulants):
     """Creates populations for baseline scenario and iron fortification intervention scenario,
@@ -61,7 +65,7 @@ class IronBirthweightCalculator:
     
     treated_lbwsg_rr_colname = 'treated_lbwsg_rr'
 
-    def __init__(self, location, artifact_path, year, draws, take_mean=False):
+    def __init__(self, location, artifact_path, year, draws, take_mean=False, random_seed=None):
         """
         """
         # Save input parameters so we can look them up later if necessary/desired
@@ -71,27 +75,41 @@ class IronBirthweightCalculator:
         self.draws = draws # These will also be stored in global_data, unless take_mean is True
         
         # TODO: Perhaps create and save a numpy random generator, and share it via global_data
+        # random_generator = np.random.default_rng(random_seed) # Now do something with this...
         
-        if take_mean:
-            mean_colname = f'mean_of_{len(draws)}_draws'
-            draws = [mean_colname]
+#         if take_mean:
+#             mean_draws_name = f'mean_of_{len(draws)}_draws'
+#             draws = [mean_draws_name]
             
+        mean_draws_name = f'mean_of_{len(draws)}_draws' if take_mean else None
+
         # Load iron intervention data
 #         flour_coverage_df = lsff_interventions.get_flour_coverage_df()
 #         baseline_coverage = flour_coverage_df.loc[location, ('eats_fortified', 'mean')] / 100
 #         intervention_coverage = flour_coverage_df.loc[location, ('eats_fortifiable', 'mean')] / 100
-        self.global_data = lsff_interventions.get_global_data(draws)
+        self.global_data = lsff_interventions.get_global_data(draws, mean_draws_name=mean_draws_name)
         self.local_data = lsff_interventions.get_local_data(location, self.global_data)
         
         # Load LBWSG data
-        exposure_data = lbwsg.read_lbwsg_data(
-            artifact_path, 'exposure', "age_end < 1", f"year_start == {year}", draws=self.draws)
-        rr_data = lbwsg.read_lbwsg_data(
-            artifact_path, 'relative_risk', "age_end < 1", f"year_start == {year}", draws=self.draws)
+        if year==2017:
+            exposure_data = lbwsg.read_lbwsg_data(
+                artifact_path, 'exposure', "age_end < 1", f"year_start == {year}", draws=self.draws)
+            rr_data = lbwsg.read_lbwsg_data(
+                artifact_path, 'relative_risk', "age_end < 1", f"year_start == {year}", draws=self.draws)
+        elif year==2019:
+            exposure_data = pd.read_hdf(artifact_path, f"/gbd_2019/exposure/bmgf_25_countries")
+            location_id = id_helper.list_ids('location', location)
+            exposure_data = lbwsg.preprocess_gbd_data(
+                exposure_data, draws=self.draws,
+                filter_terms=[f"location_id == {location_id}"],
+                mean_draws_name=mean_draws_name
+            )
+            rr_data = pd.read_hdf(artifact_path, '/gbd_2019/relative_risk/diarrheal_diseases')
+            rr_data = lbwsg.preprocess_gbd_data(rr_data, draws=self.draws, mean_draws_name=mean_draws_name)
         
-        if take_mean:
-            exposure_data = exposure_data.mean(axis=1).rename(mean_colname).to_frame()
-            rr_data = rr_data.mean(axis=1).rename(mean_colname).to_frame()
+#         if take_mean:
+#             exposure_data = exposure_data.mean(axis=1).rename(mean_draws_name).to_frame()
+#             rr_data = rr_data.mean(axis=1).rename(mean_draws_name).to_frame()
 
         # Create model components
         self.lbwsg_distribution = LBWSGDistribution(exposure_data)
@@ -207,8 +225,9 @@ def parse_args(args):
         year=2017
         draws = [0,50,100]
         take_mean = False
+        random_seed = 191919
         num_simulants = 10
-        args = ParsedArgs(location, artifact_path, year, draws, take_mean, num_simulants)
+        args = ParsedArgs(location, artifact_path, year, draws, take_mean, random_seed, num_simulants)
     return args
 
 def main(args=None):
