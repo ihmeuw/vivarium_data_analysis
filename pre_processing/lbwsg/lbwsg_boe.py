@@ -7,58 +7,58 @@ from lsff_interventions import IronFortificationIntervention
 
 import sys, os.path
 sys.path.append(os.path.abspath("../.."))
-from preprocessing import id_helper
+from pre_processing import id_helper
 
 # Class to store and name the arguments passed to main()
 ParsedArgs = namedtuple('ParsedArgs', "location, artifact_path, year, draws, take_mean, random_seed, num_simulants")
 
-def initialize_population_table(draws, num_simulants):
-    """Creates populations for baseline scenario and iron fortification intervention scenario,
-    assigns birthweights and gestational ages to each simulant, shifts birthweights appropriately,
-    and assigns relative risks for mortality based on resulting LBWSG categories.
-    """
-    # Create baseline population and assign demographic data
-    pop = pd.DataFrame(index=pd.MultiIndex.from_product(
-        [draws, range(num_simulants)], names=['draw', 'simulant_id']))
-    assign_sex(pop)
-    assign_age(pop)
-    return pop
+# def initialize_population_table(draws, num_simulants):
+#     """Creates populations for baseline scenario and iron fortification intervention scenario,
+#     assigns birthweights and gestational ages to each simulant, shifts birthweights appropriately,
+#     and assigns relative risks for mortality based on resulting LBWSG categories.
+#     """
+#     # Create baseline population and assign demographic data
+#     pop = pd.DataFrame(index=pd.MultiIndex.from_product(
+#         [draws, range(num_simulants)], names=['draw', 'simulant_id']))
+#     assign_sex(pop)
+#     assign_age(pop)
+#     return pop
 
-def assign_simulant_property(pop, property_name, choice_function=None):
-    # Default is to assign uniform propensities
-    if choice_function is None:
-        choice_function = lambda size: np.random.uniform(size=size)
-    simulant_index = pop.index.unique(level='simulant_id')
-    simulant_values = pd.Series(choice_function(len(simulant_index)), index=simulant_index, name=property_name)
-    # Join simulant values with pop.index to broadcast the same values over all draws
-    pop[property_name] = pop[[]].join(simulant_values)
-
-def assign_sex(pop):
-#     pop['sex'] = np.random.choice(['Male', 'Female'], size=len(pop))
+# def assign_simulant_property(pop, property_name, choice_function=None):
+#     # Default is to assign uniform propensities
+#     if choice_function is None:
+#         choice_function = lambda size: np.random.uniform(size=size)
 #     simulant_index = pop.index.unique(level='simulant_id')
-#     sexes = pd.Series(np.random.choice(['Male', 'Female'], size=len(simulant_ids)), index=simulant_index, name='sex')
-#     pop['sex'] = pop[[]].join(sexes)
-    def choose_random_sex(size): return np.random.choice(['Male', 'Female'], size=size)
-    assign_simulant_property(pop, 'sex', choose_random_sex)
+#     simulant_values = pd.Series(choice_function(len(simulant_index)), index=simulant_index, name=property_name)
+#     # Join simulant values with pop.index to broadcast the same values over all draws
+#     pop[property_name] = pop[[]].join(simulant_values)
 
-def assign_age(pop):
-    pop['age'] = 0.0 # np.random.uniform(0,28/365, size=num_simulants)
-    pop['age_start'] = 0.0
-    pop['age_end'] = 7/365
-    pop['age_group_id'] = 2 # early neonatal
+# def assign_sex(pop):
+# #     pop['sex'] = np.random.choice(['Male', 'Female'], size=len(pop))
+# #     simulant_index = pop.index.unique(level='simulant_id')
+# #     sexes = pd.Series(np.random.choice(['Male', 'Female'], size=len(simulant_ids)), index=simulant_index, name='sex')
+# #     pop['sex'] = pop[[]].join(sexes)
+#     def choose_random_sex(size): return np.random.choice(['Male', 'Female'], size=size)
+#     assign_simulant_property(pop, 'sex', choose_random_sex)
 
-def assign_propensity(pop, propensity_name):
-    """Assigns an independent uniform random number to each simulant.
-    Enables sharing randomness across draws and scenarios.
-    """
-#     pop[propensity_name] = np.random.uniform(size=len(pop))
-    assign_simulant_property(pop, propensity_name, choice_function=None)
+# def assign_age(pop):
+#     pop['age'] = 0.0 # np.random.uniform(0,28/365, size=num_simulants)
+#     pop['age_start'] = 0.0
+#     pop['age_end'] = 7/365
+#     pop['age_group_id'] = 2 # early neonatal
 
-def assign_propensities(pop, propensity_names):
-    """Assigns propensities for each name in a list of propensity names.
-    """
-    for propensity_name in propensity_names:
-        assign_simulant_property(pop, propensity_name)
+# def assign_propensity(pop, propensity_name):
+#     """Assigns an independent uniform random number to each simulant.
+#     Enables sharing randomness across draws and scenarios.
+#     """
+# #     pop[propensity_name] = np.random.uniform(size=len(pop))
+#     assign_simulant_property(pop, propensity_name, choice_function=None)
+
+# def assign_propensities(pop, propensity_names):
+#     """Assigns propensities for each name in a list of propensity names.
+#     """
+#     for propensity_name in propensity_names:
+#         assign_simulant_property(pop, propensity_name)
 
 class IronBirthweightCalculator:
     """Class to run nanosimulations for the effect of iron on low birthweight."""
@@ -72,7 +72,7 @@ class IronBirthweightCalculator:
         self.location = location
         self.artifact_path = artifact_path
         self.year = year
-        self.draws = draws # These will also be stored in global_data, unless take_mean is True
+#         self.draws = draws # These will also be stored in global_data, unless take_mean is True
         
         # TODO: Perhaps create and save a numpy random generator, and share it via global_data
         # random_generator = np.random.default_rng(random_seed) # Now do something with this...
@@ -93,19 +93,19 @@ class IronBirthweightCalculator:
         # Load LBWSG data
         if year==2017:
             exposure_data = lbwsg.read_lbwsg_data(
-                artifact_path, 'exposure', "age_end < 1", f"year_start == {year}", draws=self.draws)
+                artifact_path, 'exposure', "age_end < 1", f"year_start == {year}", draws=draws)
             rr_data = lbwsg.read_lbwsg_data(
-                artifact_path, 'relative_risk', "age_end < 1", f"year_start == {year}", draws=self.draws)
+                artifact_path, 'relative_risk', "age_end < 1", f"year_start == {year}", draws=draws)
         elif year==2019:
             exposure_data = pd.read_hdf(artifact_path, f"/gbd_2019/exposure/bmgf_25_countries")
             location_id = id_helper.list_ids('location', location)
             exposure_data = lbwsg.preprocess_gbd_data(
-                exposure_data, draws=self.draws,
+                exposure_data, draws=draws,
                 filter_terms=[f"location_id == {location_id}"],
                 mean_draws_name=mean_draws_name
             )
             rr_data = pd.read_hdf(artifact_path, '/gbd_2019/relative_risk/diarrheal_diseases')
-            rr_data = lbwsg.preprocess_gbd_data(rr_data, draws=self.draws, mean_draws_name=mean_draws_name)
+            rr_data = lbwsg.preprocess_gbd_data(rr_data, draws=draws, mean_draws_name=mean_draws_name)
         
 #         if take_mean:
 #             exposure_data = exposure_data.mean(axis=1).rename(mean_draws_name).to_frame()
@@ -131,12 +131,15 @@ class IronBirthweightCalculator:
         and assigns relative risks for mortality based on resulting LBWSG categories.
         """
         # Create baseline population and assign demographic data
-        self.baseline_pop = initialize_population_table(self.global_data.draws, num_simulants)
+        self.baseline_pop = demography.initialize_population_table(self.global_data.draws, num_simulants, 0)
 
         # Assign propensities to share between scenarios
 #         assign_propensity(self.baseline_pop, IronFortificationIntervention.propensity_name)
-        self.lbwsg_distribution.assign_propensities(self.baseline_pop)
-        self.iron_intervention.assign_propensities(self.baseline_pop)
+#         self.lbwsg_distribution.assign_propensities(self.baseline_pop)
+#         self.iron_intervention.assign_propensities(self.baseline_pop)
+        propensity_names = [name for component in (self.lbwsg_distribution, self.iron_intervention)
+                            for name in component.get_propensity_names()]
+        demography.assign_propensities(self.baseline_pop, propensity_names)
 
 #         # Assign baseline exposure - ideally this would be done with a propensity to share between scenarios,
 #         # but that's more complicated to implement, so I'll just copy the table after assigning lbwsg exposure.
@@ -172,6 +175,10 @@ class IronBirthweightCalculator:
         self.iron_intervention.assign_treated_birthweight(
             self.intervention_pop, self.lbwsg_distribution, self.local_data.eats_fortifiable)
 
+    def age_populations(self, age_increment=1/365):
+        demography.increase_age(self.baseline_pop, age_increment)
+        demography.increase_age(self.intervention_pop, age_increment)
+
     def assign_lbwsg_relative_risks(self):
         # Compute the LBWSG relative risks in both scenarios - these will be used to compute the PIF
         # TODO: Maybe have lbwsg return the RR values instead, and assign them to the appropriate column here
@@ -191,6 +198,7 @@ class IronBirthweightCalculator:
         self.assign_lbwsg_exposure()
         self.assign_iron_treatment_deleted_birthweights()
         self.assign_iron_treated_birthweights()
+        self.age_populations() # Necessary because there are no relative risks for birth age group
         self.assign_lbwsg_relative_risks()
         self.calculate_potential_impact_fraction()
 
