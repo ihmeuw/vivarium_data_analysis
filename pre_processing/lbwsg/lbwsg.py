@@ -388,6 +388,7 @@ def get_relative_risk_set_by_category(rr_data, draw=0, age_group_id=2, sex='Fema
     """rr_data is assumed to be GBD's LBWSG RR data returned by get_draws.
     `draw` should be a single draw if take_mean=False; otherwise `draw` should be an iterable of draws
     over which to compute the mean relative risk.
+    This function could be useful for plotting RR's for the LBWSG categories, e.g. as heat maps.
     """
     if take_mean:
         draws = draw # Draws should be a list of draws in this case
@@ -622,7 +623,8 @@ class LBWSGRiskEffectInterp2d:
 
         def make_spline(z):
             # z will be a row of self.log_rr
-            # Reindex z to make sure categories are aligned with x
+            # Reindex z to make sure categories are aligned with x... shouldn't be necessary if above assert statement passes
+            # Setting bounds_error=False, fill_value=None will extrapolate by nearest neighbor for out of bounds
             return interp2d(x,y,z.reindex(x.index, copy=False), kind='linear', bounds_error=False, fill_value=None)
 
         log_rr_splines = self.log_rr.apply(make_spline, axis='columns').rename('log_rr_spline')
@@ -637,7 +639,7 @@ class LBWSGRiskEffectInterp2d:
         )
         return pop_splines
 
-    def assign_relative_risk(self, pop, rr_colname='interpolated_lbwsg_relative_risk', inplace=True):
+    def assign_relative_risk(self, pop, rr_colname='lbwsg_relative_risk', inplace=True):
         pop_log_rr_splines = self.get_splines_for_population(pop)
 
         def evaluate_spline(row):
@@ -651,6 +653,9 @@ class LBWSGRiskEffectInterp2d:
             .apply(evaluate_spline, axis=1)
             .astype(float)
         )
+        # Make sure log RR's are nonnegative so RR's will be >=1
+        # In theory we shouldn't have to do this, but for some reason the splines were giving some negative values
+        np.clip(log_rr, a_min=0, a_max=None, out=log_rr)
 
         rr = np.exp(log_rr).rename(rr_colname)
         if inplace:
