@@ -108,7 +108,9 @@ class IronBirthweightCalculator:
                 mean_draws_name=mean_draws_name
             )
             rr_data = pd.read_hdf(artifact_path, '/gbd_2019/relative_risk/diarrheal_diseases')
-            rr_data = lbwsg.preprocess_gbd_data(rr_data, draws=draws, mean_draws_name=mean_draws_name)
+            # For now we only need early neonatal RR's
+            rr_data = lbwsg.preprocess_gbd_data(
+                rr_data, draws=draws, filter_terms=["age_group_id==2"], mean_draws_name=mean_draws_name)
         
 #         if take_mean:
 #             exposure_data = exposure_data.mean(axis=1).rename(mean_draws_name).to_frame()
