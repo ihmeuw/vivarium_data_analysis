@@ -48,7 +48,7 @@ def get_iron_concentration(location, draws):
     scalar if there is no uncertainty, or pandas Series indexed by draw if there is uncertainty.
     """
     if location == 'India':
-        iron_conc_dist = stats.uniform(loc=14, scale=21.5-14), # Uniform(14,21.5) mg iron as NaFeEDTA per kg flour
+        iron_conc_dist = stats.uniform(loc=14, scale=21.5-14) # Uniform(14,21.5) mg iron as NaFeEDTA per kg flour
 #         if take_mean: # we'd have to pass another argument
 #         if isinstance(draws, pd.CategoricalIndex): # We used a categorical index if we took the mean over draws
         if len(draws) == 1: # Use our best guess if there's only one draw or we took the mean
