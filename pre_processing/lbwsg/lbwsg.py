@@ -649,14 +649,14 @@ class LBWSGRiskEffectInterp2d:
 
         def evaluate_spline(row):
             # 'log_rr_spline' = pop_log_rr_splines.name, if pop_log_rr_splines were a Series
-            return row['log_rr_spline'](row[bw_colname], row[ga_colname])
+            return row['log_rr_spline'](row[bw_colname], row[ga_colname])[0] # spline returns an array, so access 1st element
 
         # [['birthweight','gestational_age']]
         log_rr = (
             pop[[bw_colname, ga_colname]]
             .join(pop_log_rr_splines)
             .apply(evaluate_spline, axis=1)
-            .astype(float)
+#             .astype(float)
         )
         # Make sure log RR's are nonnegative so RR's will be >=1,
         # and that they aren't too large, which will cause overflow.
