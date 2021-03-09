@@ -140,12 +140,12 @@ def make_india_ethiopia_nigeria_plots(data, nutrient, measure, coverage_levels, 
                      location_spacer + coverage_spacer * n,
                      location_spacer * 2 + coverage_spacer * n], rate['mean'], s=100,
                     label=f'{int(coverage_levels[n] * 100)} percent coverage', color=colors[n])
-    plt.plot()
+#     plt.plot()
 
     if wra==True:
         subpop = 'Women of Reproductive Age'
     else:
-        subpop = 'Children Under Five'
+        subpop = 'Children Aged 0-7 Days'#'Children Under Five'
 
     if measure == 'rates':
         plt.title(f'DALYs Averted per 100,000 Person-Years due to\n{nutrient} Fortication Among {subpop}\n{subtitle}')
@@ -160,3 +160,4 @@ def make_india_ethiopia_nigeria_plots(data, nutrient, measure, coverage_levels, 
     # plt.xlabel('Year')
     ax.set_xticks([coverage_spacer, location_spacer + coverage_spacer, location_spacer * 2 + coverage_spacer])
     ax.set_xticklabels(['India', 'Ethiopia', 'Nigeria'])
+    plt.show()
