@@ -84,7 +84,7 @@ def sample_flour_consumption(location, sample_size):
 #     )
     return get_flour_consumption_from_propensity(location, np.random.uniform(0,1,size=sample_size))
 
-def get_flour_consumption_from_propensity(location, propensity):
+def get_flour_consumption_from_propensity(mean_consumption, propensity):
     """Get distribution of daily flour consumption (in Ethiopia) based on the specified propensity array.
     The distribution is uuniform between each quartile: min=0, q1=77.5, q2=100, q3=200, max=350.5
     This distribution represents individual heterogeneity and currently has no parameter uncertainty.
@@ -96,10 +96,16 @@ def get_flour_consumption_from_propensity(location, propensity):
     q = (0, 77.5, 100, 200, 350.5) # q0=min=0, q1=77.5, q2=100, q3=200, q4=max=350.5
     u = propensity # use shorter name for readibility - u ~ uniform(0,1) random number
     # Scale the uniform random number to the correct interval based on its quartile
-    return np.select(
+    standardized_consumption = np.select(
         [u<0.25, u<0.5, u<0.75, u<1],
         [q[1]*u/0.25, q[1]+(q[2]-q[1])*(u-0.25)/0.25, q[2]+(q[3]-q[2])*(u-0.5)/0.25, q[3]+(q[4]-q[3])*(u-0.75)/0.25]
     )
+    if isinstance(propensity, pd.Series):
+        standardized_consumption = pd.Series(standardized_consumption, index=propensity.index)
+    return mean_consumption * standardized_consumption / get_standardized_consumption_mean()
+
+def get_standardized_consumption_mean():
+    return 138.08844717769867 # Calculated by taking the mean of 1_000_000 samples
 
 def calculate_birthweight_shift(dose_response, iron_concentration, daily_flour):
     """
@@ -139,6 +145,9 @@ def get_coverage_draws(location_id, draws, vehicle, covered_proportion_of_eats_f
         )
 
     def convert_draw_index_for_row(cov_df, location_id, year, draws, name, coverage_level=None):
+        """Converts rows of the coverage dataframes into Series or scalars that will work with
+        IronFortificationIntervention.
+        """
         if coverage_level is None: # There is no counterfactual coverage level specified for baseline coverage
             cov_series = cov_df.loc[(location_id, year)]
         else: # There can be high, medium, and low counterfactual coverage levels for intervention
@@ -155,6 +164,24 @@ def get_coverage_draws(location_id, draws, vehicle, covered_proportion_of_eats_f
         intervention_cov, location_id, 2022, draws, 'eats_fortifiable', coverage_level=covered_proportion_of_eats_fortifiable)
 
     return baseline_cov, intervention_cov
+
+def generate_normal_draws(mean, lower, upper, shape=1, quantile_ranks=(0.025,0.975), random_state=None):
+    rng = np.random.default_rng(random_state)
+    stdev = (upper - lower) / (stats.norm.ppf(quantile_ranks[1]) - stats.norm.ppf(quantile_ranks[0]))
+    return stats.norm.rvs(mean, stdev, size=shape, random_state=rng)
+
+def get_mean_consumption_draws(location_id, vehicle, draws):
+    filename = '../lsff_project/data_prep/outputs/gday_nigeria_ethiopia_india_02_24_2021.csv'
+    consumption_df = pd.read_csv(filename)
+    consumption_df = consumption_df.query("location_id==@location_id and vehicle==@vehicle")
+    values = generate_normal_draws(
+        consumption_df['value_mean'], consumption_df['lower'], consumption_df['upper'],
+        shape=len(draws)
+    )
+    assert (values >= 0).all(), f"Negative {vehicle} consumption values!"
+    mean_consumption = pd.Series(
+        values, index=draws, name=f"mean_{'_'.join(vehicle.lower().split())}_consumption")
+    return mean_consumption
 
 def get_global_data(draws, mean_draws_name=None):
     """
@@ -206,8 +233,9 @@ def get_local_data(global_data, location, vehicle, covered_proportion_of_eats_fo
     else:
         location_id = id_helper.list_ids('location', location)
     iron_concentration = get_iron_concentration(location, global_data.draws)
-    # Same mean daily flour for all draws - no parameter uncertainty in flour consumption distribution
-    mean_daily_flour = sample_flour_consumption(location, 10_000).mean()
+#     # Same mean daily flour for all draws - no parameter uncertainty in flour consumption distribution
+#     mean_daily_flour = sample_flour_consumption(location, 10_000).mean()
+    mean_daily_flour = get_mean_consumption_draws(location_id, vehicle, global_data.draws)
     # Check data dimensions (scalar vs. Series) to make sure multiplication will work
     mean_birthweight_shift = calculate_birthweight_shift(
         global_data.birthweight_dose_response, # indexed by draw
@@ -228,7 +256,7 @@ def get_local_data(global_data, location, vehicle, covered_proportion_of_eats_fo
                                             ['location',
                                              'location_id',
                                             'iron_concentration', # scalar or indexed by draw
-                                            'mean_daily_flour', # scalar
+                                            'mean_daily_flour', # indexed by draw
                                             'mean_birthweight_shift', # indexed by draw
                                             'eats_fortified', # scalar or indexed by draw
                                             'eats_fortifiable', # scalar or indexed by draw
@@ -330,8 +358,11 @@ class IronFortificationIntervention:
         # be sufficient for large enough populations.
 #         pop['mother_daily_flour'] = pop['mother_is_iron_fortified'] * sample_flour_consumption(len(pop))
         pop['mother_daily_flour'] = pop['mother_is_iron_fortified'].astype(float)
+        # This call to `get_flour_consumption_from_propensity` should broadcast the index draws of mean_daily_flour
+        # over the simulant_id's in pop.index
+#         print(pop.loc[pop.mother_is_iron_fortified, 'mother_flour_consumption_propensity'])
         pop.loc[pop.mother_is_iron_fortified, 'mother_daily_flour'] = get_flour_consumption_from_propensity(
-            self.local_data.location,
+            self.local_data.mean_daily_flour,
             pop.loc[pop.mother_is_iron_fortified, 'mother_flour_consumption_propensity']
         )
         # This should broadcast draws of dose response and iron concentration over simulant id's indexing daily flour
