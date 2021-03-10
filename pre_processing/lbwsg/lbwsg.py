@@ -20,8 +20,8 @@ if importlib.util.find_spec('gbd_mapping') is not None:
     gbd_mapping = importlib.import_module('gbd_mapping')
 if importlib.util.find_spec('db_queries') is not None:
     get_ids = importlib.import_module('db_queries').get_ids
-if importlib.util.find_spec('get_draws') is not None:
-    get_draws = importlib.import_module('get_draws').api.get_draws
+if importlib.util.find_spec('get_draws.api') is not None:
+    get_draws = importlib.import_module('get_draws.api').get_draws
 
 LBWSG_REI_ID = 339 # GBD's "risk/etiology/impairment" id for Low birthweight and short gestation
 GBD_2019_ROUND_ID = 6
