@@ -59,6 +59,9 @@ def read_lbwsg_data(artifact_path, measure, *filter_terms, draws='all'):
     """
     key = f'risk_factor/low_birth_weight_and_short_gestation/{measure}'
     query_string = ' and '.join(filter_terms)
+    # NOTE: If draws is a numpy array, this line throws a warning:
+    #  "FutureWarning: elementwise comparison failed; returning scalar instead,
+    #   but in the future will perform elementwise comparison"
     if draws=='all':
         draws = range(1000)
     
@@ -84,7 +87,9 @@ def convert_draws_to_long_form(data, name='value', copy=True):
 #     draw_cols = data.filter(like='draw').columns
 #     index_columns = data.columns.difference(draw_cols)
 #     data.set_index(index_columns.to_list())
-    data.columns = data.columns.str.replace('draw_', '').astype(int)
+    # Check whether columns are named draw_### in case we already took a mean over all draws
+    if len(data.filter(regex=r'^draw_\d{1,3}$').columns) == data.shape[1]:
+        data.columns = data.columns.str.replace('draw_', '').astype(int)
     data.columns.rename('draw', inplace=True)
     data = data.stack()
     data.rename(name, inplace=True)
@@ -272,9 +277,9 @@ class LBWSGDistribution:
         pop = pop.reset_index().set_index([ga_col, new_bw_col])
         in_bounds = self.cat_df.index.get_indexer(pop.index) != -1
         pop['valid_shift'] = in_bounds
-        pop.loc[in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[in_bounds].index, 'category'].values
+        pop.loc[in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[in_bounds].index, 'category'].array
         pop = pop.reset_index(new_bw_col).set_index(bw_col, append=True)
-        pop.loc[~in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[~in_bounds].index, 'category'].values
+        pop.loc[~in_bounds, 'new_lbwsg_cat'] = self.cat_df.loc[pop.loc[~in_bounds].index, 'category'].array
 #         pop.loc[~in_bounds, 'new_lbwsg_cat'] = pop.loc[~in_bounds, 'lbwsg_cat']
         pop = pop.reset_index()
         pop.loc[~in_bounds, new_bw_col] = pop.loc[~in_bounds, bw_col].values
