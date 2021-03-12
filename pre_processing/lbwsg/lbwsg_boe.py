@@ -6,7 +6,7 @@ from lbwsg import LBWSGDistribution, LBWSGRiskEffect
 from lsff_interventions import IronFortificationIntervention
 
 # Class to store and name the arguments passed to main()
-ParsedArgs = namedtuple('ParsedArgs', "location, artifact_path, year, draws, num_simulants")
+ParsedArgs = namedtuple('ParsedArgs', "location, artifact_path, year, draws, take_mean, num_simulants")
 
 def initialize_population_table(draws, num_simulants):
     """Creates populations for baseline scenario and iron fortification intervention scenario,
@@ -39,17 +39,21 @@ class IronBirthweightCalculator:
     
     treated_lbwsg_rr_colname = 'treated_lbwsg_rr'
 
-    def __init__(self, location, artifact_path, year, draws):
+    def __init__(self, location, artifact_path, year, draws, take_mean=False):
         """
         """
         # Save input parameters so we can look them up later if necessary/desired
         self.location = location
         self.artifact_path = artifact_path
         self.year = year
-#         self.draws = draws # Store these in global_data instead
+        self.draws = draws # These will also be stored in global_data, unless take_mean is True
         
         # TODO: Perhaps create and save a numpy random generator, and share it via global_data
         
+        if take_mean:
+            mean_colname = f'mean_of_{len(draws)}_draws'
+            draws = [mean_colname]
+            
         # Load iron intervention data
 #         flour_coverage_df = lsff_interventions.get_flour_coverage_df()
 #         baseline_coverage = flour_coverage_df.loc[location, ('eats_fortified', 'mean')] / 100
@@ -59,9 +63,13 @@ class IronBirthweightCalculator:
         
         # Load LBWSG data
         exposure_data = lbwsg.read_lbwsg_data(
-            artifact_path, 'exposure', "age_end < 1", f"year_start == {year}", draws=draws)
+            artifact_path, 'exposure', "age_end < 1", f"year_start == {year}", draws=self.draws)
         rr_data = lbwsg.read_lbwsg_data(
-            artifact_path, 'relative_risk', "age_end < 1", f"year_start == {year}", draws=draws)
+            artifact_path, 'relative_risk', "age_end < 1", f"year_start == {year}", draws=self.draws)
+        
+        if take_mean:
+            exposure_data = exposure_data.mean(axis=1).rename(mean_colname).to_frame()
+            rr_data = rr_data.mean(axis=1).rename(mean_colname).to_frame()
 
         # Create model components
         self.lbwsg_distribution = LBWSGDistribution(exposure_data)
@@ -75,7 +83,7 @@ class IronBirthweightCalculator:
         # which will be initialized in initialize_population_tables
         self.baseline_pop = None
         self.intervention_pop = None
-        self.population_impact_fraction = None
+        self.potential_impact_fraction = None
 
     def initialize_population_tables(self, num_simulants):
         """Creates populations for baseline scenario and iron fortification intervention scenario,
@@ -98,7 +106,7 @@ class IronBirthweightCalculator:
         self.intervention_pop = self.baseline_pop.copy()
         
         # Reset PIF to None until we're ready to recompute it
-        self.population_impact_fraction = None
+        self.potential_impact_fraction = None
 
     def assign_lbwsg_exposure(self):
         # Assign baseline exposure - ideally this would be done with a propensity to share between scenarios,
@@ -132,8 +140,8 @@ class IronBirthweightCalculator:
 
 #         return namedtuple('InitPopTables', 'baseline, iron_fortification')(baseline_pop, intervention_pop)
     
-    def calculate_population_impact_fraction(self):
-        self.population_impact_fraction = population_impact_fraction(
+    def calculate_potential_impact_fraction(self):
+        self.potential_impact_fraction = potential_impact_fraction(
             self.baseline_pop, self.intervention_pop, 'lbwsg_relative_risk')
         
     def do_back_of_envelope_calculation(self, num_simulants):
@@ -144,7 +152,7 @@ class IronBirthweightCalculator:
         self.assign_iron_treatment_deleted_birthweights()
         self.assign_iron_treated_birthweights()
         self.assign_lbwsg_relative_risks()
-        self.calculate_population_impact_fraction()
+        self.calculate_potential_impact_fraction()
 
 # def initialize_population_table(num_simulants, draws):
 #     """
@@ -159,7 +167,7 @@ class IronBirthweightCalculator:
 #     return pop
 
     
-def population_impact_fraction(baseline_pop, counterfactual_pop, rr_colname):
+def potential_impact_fraction(baseline_pop, counterfactual_pop, rr_colname):
     """Computes the population impact fraction for the specified baseline and counterfactual populations."""
     baseline_mean_rr = baseline_pop.groupby('draw')[rr_colname].mean()
     counterfactual_mean_rr = counterfactual_pop.groupby('draw')[rr_colname].mean()
@@ -176,8 +184,9 @@ def parse_args(args):
         artifact_path = f'/share/costeffectiveness/artifacts/vivarium_conic_lsff/{location.lower()}.hdf'
         year=2017
         draws = [0,50,100]
+        take_mean = False
         num_simulants = 10
-        args = ParsedArgs(location, artifact_path, year, draws, num_simulants)
+        args = ParsedArgs(location, artifact_path, year, draws, take_mean, num_simulants)
     return args
 
 def main(args=None):
@@ -188,7 +197,7 @@ def main(args=None):
         args = sys.argv[1:]
         
     args = parse_args(args)
-    sim = IronBirthweightCalculator(args.location, args.artifact_path, args.year, args.draws)
+    sim = IronBirthweightCalculator(args.location, args.artifact_path, args.year, args.draws, args.take_mean)
     baseline_pop, intervention_pop = sim.initialize_population_tables(args.num_simulants)
     pif = population_impact_fraction(baseline_pop, intervention_pop, IronBirthweightNanoSim.treated_lbwsg_rr_colname)
     # do something with pif...
