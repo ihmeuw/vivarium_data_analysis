@@ -20,19 +20,41 @@ def initialize_population_table(draws, num_simulants):
     assign_age(pop)
     return pop
 
+def assign_simulant_property(pop, property_name, choice_function=None):
+    # Default is to assign uniform propensities
+    if choice_function is None:
+        choice_function = lambda size: np.random.uniform(size=size)
+    simulant_index = pop.index.unique(level='simulant_id')
+    simulant_values = pd.Series(choice_function(len(simulant_index)), index=simulant_index, name=property_name)
+    # Join simulant values with pop.index to broadcast the same values over all draws
+    pop[property_name] = pop[[]].join(simulant_values)
+
 def assign_sex(pop):
-    pop['sex'] = np.random.choice(['Male', 'Female'], size=len(pop))
+#     pop['sex'] = np.random.choice(['Male', 'Female'], size=len(pop))
+#     simulant_index = pop.index.unique(level='simulant_id')
+#     sexes = pd.Series(np.random.choice(['Male', 'Female'], size=len(simulant_ids)), index=simulant_index, name='sex')
+#     pop['sex'] = pop[[]].join(sexes)
+    def choose_random_sex(size): return np.random.choice(['Male', 'Female'], size=size)
+    assign_simulant_property(pop, 'sex', choose_random_sex)
 
 def assign_age(pop):
     pop['age'] = 0.0 # np.random.uniform(0,28/365, size=num_simulants)
     pop['age_start'] = 0.0
     pop['age_end'] = 7/365
-    
+    pop['age_group_id'] = 2 # early neonatal
+
 def assign_propensity(pop, propensity_name):
-    """Assigns an independent uniform random number to each (simulant,draw) pair.
-    Enables sharing randomness across scenarios.
+    """Assigns an independent uniform random number to each simulant.
+    Enables sharing randomness across draws and scenarios.
     """
-    pop[propensity_name] = np.random.uniform(size=len(pop))
+#     pop[propensity_name] = np.random.uniform(size=len(pop))
+    assign_simulant_property(pop, propensity_name, choice_function=None)
+
+def assign_propensities(pop, propensity_names):
+    """Assigns propensities for each name in a list of propensity names.
+    """
+    for propensity_name in propensity_names:
+        assign_simulant_property(pop, propensity_name)
 
 class IronBirthweightCalculator:
     """Class to run nanosimulations for the effect of iron on low birthweight."""
