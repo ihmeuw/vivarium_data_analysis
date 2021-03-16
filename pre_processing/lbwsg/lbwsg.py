@@ -438,9 +438,7 @@ class LBWSGDistribution:
     def __init__(self, exposure_data):
         """"exposure_data is assumed to be preprocessed using above functions."""
         # TODO: Enable passing raw data and then sending to preprocess from the constructor.
-        # Use .to_frame() to keep column name 'prevalence' as level 0 in MultiIndex columns;
-        # Calling unstack() on the Series instead drops the name and makes the columns a simple Index.
-        self.exposure_dist = exposure_data.to_frame().unstack('lbwsg_category')
+        self.exposure_dist = exposure_data#.to_frame().unstack('lbwsg_category')
         cat_df = get_category_data()
         cat_data_cols = ['ga_start', 'ga_end', 'bw_start', 'bw_end', 'ga_width', 'bw_width']
         self.interval_data_by_category = cat_df.set_index('lbwsg_category')[cat_data_cols]
@@ -486,7 +484,11 @@ class LBWSGDistribution:
         """Returns the cumulative distribution function corresponding to the prevalences
         in this object's exposure distribution. Categories are ordered numerically.
         """
-        exposure_cdf = self.exposure_dist.loc[:,'prevalence'].cumsum(axis=1)
+        # Calling unstack() on the Series drops the name and makes the columns a simple Index.
+        # Using .to_frame() instead would keep column name 'prevalence' as level 0 in MultiIndex columns, i.e.:
+        # exposure_dist = self.exposure_dist.to_frame().unstack('lbwsg_category')
+        # exposure_cdf = exposure_dist.loc[:,'prevalence'].cumsum(axis=1)
+        exposure_cdf = self.exposure_dist.unstack('lbwsg_category').cumsum(axis=1)
        # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
         exposure_cdf = exposure_cdf.droplevel(['location_id','year_id'])
         return exposure_cdf
@@ -613,14 +615,18 @@ class LBWSGRiskEffectInterp2d:
         """"rr_data is assumed to be preprocessed using above functions."""
         self.rr_data = rr_data
         self.paf_data = paf_data
-        self.log_rr = np.log(self.rr_data.unstack('lbwsg_category').droplevel(['location_id', 'year_id']))
+#         self.log_rr = np.log(self.rr_data.unstack('lbwsg_category').droplevel(['location_id', 'year_id']))
         self.log_rr_splines = self.generate_logspace_splines()
 
+    def get_log_rr(self):
+        return np.log(self.rr_data.unstack('lbwsg_category').droplevel(['location_id', 'year_id']))
+
     def generate_logspace_splines(self):
+        log_rr = self.get_log_rr()
         interval_data_by_cat = get_category_data().set_index('lbwsg_category')
         x = interval_data_by_cat['bw_midpoint']
         y = interval_data_by_cat['ga_midpoint']
-        assert x.index.equals(self.log_rr.columns) and y.index.equals(self.log_rr.columns)
+        assert x.index.equals(log_rr.columns) and y.index.equals(log_rr.columns)
 
         def make_spline(z):
             # z will be a row of self.log_rr
@@ -631,7 +637,7 @@ class LBWSGRiskEffectInterp2d:
 #             print(z)
             return interp2d(x,y,z.reindex(x.index, copy=False), kind='linear', bounds_error=False, fill_value=None)
 
-        log_rr_splines = self.log_rr.apply(make_spline, axis='columns').rename('log_rr_spline')
+        log_rr_splines = log_rr.apply(make_spline, axis='columns').rename('log_rr_spline')
         return log_rr_splines
 
     def get_splines_for_population(self, pop):
