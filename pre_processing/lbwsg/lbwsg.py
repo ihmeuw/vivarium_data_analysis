@@ -8,6 +8,10 @@ https://github.com/ihmeuw/vivarium_public_health/blob/master/src/vivarium_public
 import pandas as pd, numpy as np
 import re
 from typing import Tuple#, Dict, Iterable
+from pandas.api.types import CategoricalDtype
+
+import demography
+# from demography import get_age_group_data, get_sex_id_map
 
 # import gbd_mapping as gbd
 import importlib
@@ -15,6 +19,11 @@ if importlib.util.find_spec('gbd_mapping') is not None:
     gbd_mapping = importlib.import_module('gbd_mapping')
 if importlib.util.find_spec('db_queries') is not None:
     get_ids = importlib.import_module('db_queries').get_ids
+if importlib.util.find_spec('get_draws') is not None:
+    get_draws = importlib.import_module('get_draws').api.get_draws
+
+LBWSG_REI_ID = 339 # GBD's "risk/etiology/impairment" id for Low birthweight and short gestation
+GBD_2019_ROUND_ID = 6
 
 # The support of the LBWSG distribution is nonconvex, but adding this one category makes it convex,
 # which makes life easier when shifting the birthweights or gestational ages.
@@ -37,6 +46,8 @@ OUTSIDE_BOUNDS_CATEGORY = 'cat_outside_bounds'
 #     )
 # where `lbwsg_exposure_nigeria_birth_male` was exposure data from `get_draws`.
 
+# TODO: Perhaps store the category descriptions here as well
+# Modelable entity IDs for LBWSG categories
 CATEGORY_TO_MEID_GBD_2019 = {
  'cat2': 10755,
  'cat8': 10761,
@@ -98,7 +109,21 @@ CATEGORY_TO_MEID_GBD_2019 = {
  'cat124': 20224
 }
 
-def read_lbwsg_data_by_draw_from_gbd2017_artifact(artifact_path, measure, draw, rename=None):
+####################################################
+# READING AND PROCESSING GBD DATA FOR LBWSG #
+####################################################
+
+def get_lbwsg_category_order():
+    """Returns LBWSG categories, sorted numerically."""
+    return sorted(CATEGORY_TO_MEID_GBD_2019.keys(), key=lambda s: int(s.strip('cat')))
+
+def get_lbwsg_category_dtype():
+    """Gets the data type for LBWSG categories -
+    an ordered Catgorical with order determined by get_lbwsg_category_order().
+    """
+    return CategoricalDtype(categories=get_lbwsg_category_order(), ordered=True)
+
+def read_lbwsg_data_by_draw_from_gbd_2017_artifact(artifact_path, measure, draw, rename=None):
     """
     Reads one draw of LBWSG data from an artifact.
     
@@ -117,7 +142,7 @@ def read_lbwsg_data_by_draw_from_gbd2017_artifact(artifact_path, measure, draw, 
     data = pd.concat([index, draw], axis=1)
     return data
 
-def read_lbwsg_data_from_gbd2017_artifact(artifact_path, measure, *filter_terms, draws=None):
+def read_lbwsg_data_from_gbd_2017_artifact(artifact_path, measure, *filter_terms, draws=None):
     """
     Reads multiple draws from the artifact.
     """
@@ -143,6 +168,52 @@ def read_lbwsg_data_from_gbd2017_artifact(artifact_path, measure, *filter_terms,
 #     print(index_cols.columns)
     return pd.concat(draw_data_dfs, axis=1, copy=False).set_index(index_cols.columns.to_list())
 
+def pull_lbwsg_exposure_from_gbd_2019(location_ids, year_ids=2019, save_to_hdf=None, hdf_key=None):
+    """Calls get_draws to pull LBWSG exposure data from GBD 2019."""
+    # Make sure type(location_ids) is list
+    location_ids = [location_ids] if isinstance(location_ids, int) else list(location_ids)
+    lbwsg_exposure = get_draws(
+        'rei_id',
+        gbd_id=LBWSG_REI_ID,
+        source='exposure',
+        location_id=location_ids,
+        year_id=year_ids,
+#         sex_id=sex_ids, # Default is [1,2], but 3 also exists
+        gbd_round_id=GBD_2019_ROUND_ID,
+        status='best',
+        decomp_step='step4',
+    )
+    if save_to_hdf is not None:
+        if hdf_key is None:
+            description = f"location_ids_{'_'.join(location_ids)}"
+            hdf_key = f"/gbd_2019/exposure/{description}"
+        lbwsg_exposure.to_hdf(save_to_hdf, hdf_key)
+    return lbwsg_exposure
+
+def pull_lbwsg_relative_risks_from_gbd_2019(cause_ids=None, year_ids=2019, save_to_hdf=None, hdf_key=None):
+    """Calls get_draws to pull LBWSG relative risk data from GBD 2019."""
+    global_location_id = 1 # RR's are the same for all locations - they all propagate up to location_id==1
+    if cause_ids is None:
+        cause_ids = []
+    elif isinstance(cause_ids, int):
+        cause_ids = [cause_ids]
+    lbwsg_rr = get_draws(
+            gbd_id_type=['rei_id']+['cause_id']*len(cause_ids), # Types must match gbd_id's
+            gbd_id=[LBWSG_REI_ID, *cause_ids],
+            source='rr',
+            location_id=global_location_id,
+            year_id=year_ids,
+            gbd_round_id=GBD_2019_ROUND_ID,
+            status='best',
+            decomp_step='step4',
+        )
+    if save_to_hdf is not None:
+        if hdf_key is None:
+            description = 'all' #if len(cause_ids)==0 else f"cause_ids_{'_'.join(cause_ids)}"
+            hdf_key = f"/gbd_2019/relative_risk/{description}"
+        lbwsg_rr.to_hdf(save_to_hdf, hdf_key)
+    return lbwsg_rr
+
 def rescale_prevalence(exposure):
     """Rescales prevalences to add to 1 in LBWSG exposure data pulled from GBD 2019 by get_draws."""
     # Drop residual 'cat125' parameter with meid==NaN, and convert meid col from float to int
@@ -158,6 +229,59 @@ def rescale_prevalence(exposure):
     exposure = exposure.set_index(index_cols.to_list()) / prevalence_sum
     exposure.reset_index(inplace=True)
     return exposure
+
+def preprocess_gbd_data(df, draws=None, filter_terms=None, mean_draws_name=None):
+    """df can be exposure or rr data?
+    Note that location_id for rr data will always be 1 (Global), so it won't
+    match location_id for exposure data.
+    """
+    # Filter data if requested
+    if filter_terms is not None:
+        query_string = " and ".join(filter_terms)
+        df = df.query(query_string)
+
+    # Determine what data we got and process accordingly
+    if 'cause_id' in df:
+        measure = 'relative_risk' # df is RR data
+        if len(cause_ids:=df['cause_id'].unique())>1: # Note: walrus operator := requires Python 3.8 or higher
+            # Filter to a single cause id - all affected causes have the same RR's
+            df = df.loc[df['cause_id']==cause_ids[0]]
+    elif 'measure_id' in df and list(df['measure_id'].unique()) == [5]: # measure_id 5 is Prevalence
+        measure = 'prevalence' # df is exposure data
+        df = rescale_prevalence(df) # Fix prevalence because GBD 2019 data was messed up
+    else:
+        raise ValueError("Unexpected GBD LBWSG data format...")
+
+    # Add 'sex' column and rename 'parameter' column, and convert to Categorical
+    sex_id_to_sex = demography.get_sex_id_to_sex_map()
+    df = df.join(sex_id_to_sex, on='sex_id').rename(columns={'parameter': 'lbwsg_category'})
+    df['sex'] = df['sex'].cat.remove_unused_categories()
+    df['lbwsg_category'] = df['lbwsg_category'].astype(get_lbwsg_category_dtype())
+    
+    # Find draw columns or filter to requested draws
+    if draws is None:
+        draw_cols = df.filter(regex=r'^draw_\d{1,3}$').columns.to_list()
+    else:
+        draw_cols = [f"draw_{i}" for i in draws]
+
+    # Set index columns and rename draw columns
+    index_cols = ['location_id', 'year_id', 'sex', 'age_group_id', 'lbwsg_category']
+    df = df.set_index(index_cols)[draw_cols]
+    df.columns = df.columns.str.replace('draw_', '').astype(int)
+    df.columns.rename('draw', inplace=True)
+    
+    # Take mean over draws if this was requested by specifying a name for the mean
+    if mean_draws_name is not None:
+        if measure == 'prevalence': # Take arithmetic mean of prevalence
+            df = df.mean(axis=1).rename(mean_draws_name).to_frame()
+        elif measure == 'relative_risk': # Take geometric mean of RR's
+            df = np.exp(np.log(df).mean(axis=1)).rename(mean_draws_name).to_frame()
+    # Reshape draws to long form
+    df = df.stack('draw').rename(measure)
+    return df
+
+def preprocess_artifact_data(df):
+    pass
 
 def convert_draws_to_long_form(data, name='value', copy=True):
     """
@@ -175,6 +299,10 @@ def convert_draws_to_long_form(data, name='value', copy=True):
     data = data.stack()
     data.rename(name, inplace=True)
     return data.reset_index()
+
+##########################################################
+# DATA ABOUT LBWSG RISK CATEGORIES #
+##########################################################
 
 def get_intervals_from_name(name: str) -> Tuple[pd.Interval, pd.Interval]:
     """Converts a LBWSG category name to a pair of intervals.
@@ -201,6 +329,7 @@ def get_category_descriptions(source='gbd_mapping'):
             .rename_axis('lbwsg_category').reset_index()
             .merge(descriptions) # merge on 'modelable_entity_id' if source=='get_ids', on 'lbwsg_category' if source=='gbd_mapping'
            )
+    cats['lbwsg_category'] = cats['lbwsg_category'].astype(get_lbwsg_category_dtype())
     return cats
 
 def get_category_data(source='gbd_mapping'):
@@ -212,43 +341,57 @@ def get_category_data(source='gbd_mapping'):
     cat_df = cat_df.join(cat_df['modelable_entity_name'].str.extract(extraction_regex).astype(int,copy=False))
 
     @np.vectorize
-    def get_interval_and_width(left, right):
-        return pd.Interval(left=left, right=right, closed='left'), right-left
+    def interval_width_midpoint(left, right):
+        interval = pd.Interval(left=left, right=right, closed='left')
+        return interval, interval.length, interval.mid
 
     # Create 2 new columns of pandas.Interval objects for the gestational age and birthweight intervals,
     # and 2 more new columns for the interval widths
-    cat_df['ga'], cat_df['ga_width'] = get_interval_and_width(cat_df.ga_start, cat_df.ga_end)
-    cat_df['bw'], cat_df['bw_width'] = get_interval_and_width(cat_df.bw_start, cat_df.bw_end)
+    cat_df['ga'], cat_df['ga_width'], cat_df['ga_midpoint'] = interval_width_midpoint(cat_df.ga_start, cat_df.ga_end)
+    cat_df['bw'], cat_df['bw_width'], cat_df['bw_midpoint'] = interval_width_midpoint(cat_df.bw_start, cat_df.bw_end)
     return cat_df
+
+##########################################################
+# CLASS FOR LBWSG RISK DISTRIBUTION #
+##########################################################
+
+# TODO: Move this function to prob_utils.py, and come up with a better name for it
+def sample_from_propensity(propensity, categories, category_cdf):
+    """Sample categories using the propensities.
+    propensity is a number between 0 and 1
+    categories is a list of categories
+    category_cdf is a mapping of categories to cumulative probabilities.
+    """
+    condlist = [propensity <= category_cdf[cat] for cat in categories]
+    return np.select(condlist, choicelist=categories)
+
+def sample_from_propensity_as_arrays(propensity, categories, category_cdf):
+    """Sample categories using the propensities.
+    propensity is a number (or list/array of numbers) between 0 and 1
+    categories is a list of categories
+    category_cdf is a 2d array of shape (len(propensity), len(categories)).
+    """
+    category_index = (np.asarray(propensity).reshape((-1,1)) > np.asarray(category_cdf)).sum(axis=1)
+    return np.asarray(categories)[category_index]
 
 class LBWSGDistribution:
     """
     Class to assign and adjust birthweights and gestational ages of a simulated population.
     """
     def __init__(self, exposure_data):
-        self.exposure_dist = convert_draws_to_long_form(exposure_data, name='prevalence')
-        self.exposure_dist.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
-#         self.cat_df = get_category_data_by_interval()
+        """"exposure_data is assumed to be preprocessed using above functions."""
+        # TODO: Enable passing raw data and then sending to preprocess from the constructor.
+        # Use .to_frame() to keep column name 'prevalence' as level 0 in MultiIndex columns;
+        # Calling unstack() on the Series instead drops the name and makes the columns a simple Index.
+        self.exposure_dist = exposure_data.to_frame().unstack('lbwsg_category')
         cat_df = get_category_data()
         cat_data_cols = ['ga_start', 'ga_end', 'bw_start', 'bw_end', 'ga_width', 'bw_width']
         self.interval_data_by_category = cat_df.set_index('lbwsg_category')[cat_data_cols]
         self.categories_by_interval = cat_df.set_index(['ga','bw'])['lbwsg_category']
-    
-#     def get_propensity_names(self):
-#         """Get the names of the propensities used by this object."""
-#         return ['lbwsg_cat_propensity', 'ga_propensity', 'bw_propensity']
 
-    def assign_propensities(self, pop):
-        """Assigns propensities relevant to this risk exposure to the population."""
-        # TODO: Fix this to use the same propensities across draws
-        propensities = np.random.uniform(size=(len(pop),3))
-        pop['lbwsg_cat_propensity'] = propensities[:,0] # Not actually used yet...
-        pop['ga_propensity'] = propensities[:,1]
-        pop['bw_propensity'] = propensities[:,2]
-        
-    def assign_category_from_propensity(self, pop):
-        """Assigns LBWSG categories to the population based on simulant propensities."""
-        pass
+    def get_propensity_names(self):
+        """Get the names of the propensities used by this object."""
+        return ['lbwsg_category_propensity', 'ga_propensity', 'bw_propensity']
 
     def assign_exposure(self, pop):
         """
@@ -256,19 +399,40 @@ class LBWSGDistribution:
         this object's distribution.
         """
         # Based on simulant's age and sex, assign a random LBWSG category from GBD distribution
-        # Index levels: location  sex  age_start  age_end   year_start  year_end  parameter
-#         idxs = []
-        for (draw, sex, age_start), group in pop.groupby(['draw', 'sex', 'age_start']):
-            exposure_mask = (self.exposure_dist.draw==draw) & (self.exposure_dist.sex==sex) & (self.exposure_dist.age_start==age_start)
-            cat_dist = self.exposure_dist.loc[exposure_mask]
-#             cat_dist = self.exposure_dist.query("draw==@draw and sex==@sex and age_start==@age_start")
-            pop_mask = (pop.sex == sex) & (pop.age_start == age_start) & (pop.index.get_level_values('draw') == draw)
-#             pop.loc[group.index, 'lbwsg_category'] = \ # This line is really slow!!!
-            pop.loc[pop_mask, 'lbwsg_category'] = \
-                np.random.choice(cat_dist['lbwsg_category'], size=len(group), p=cat_dist['prevalence'])
-
+        self.assign_category_from_propensity(pop, 'lbwsg_category')
         # Use propensities for ga and bw to assign a ga and bw within each category
         self.assign_ga_bw_from_propensities_within_cat(pop, 'lbwsg_category')
+
+    def assign_category_from_propensity(self, pop, category_column='lbwsg_category', inplace=True):
+        # TODO: allow specifying the category column name, and add an option to not modify pop in place
+        """Assigns LBWSG categories to the population based on simulant propensities."""
+        pop_exposure_cdf = self.get_exposure_cdf_for_population(pop)
+        lbwsg_cat = sample_from_propensity(pop['lbwsg_category_propensity'], pop_exposure_cdf.columns, pop_exposure_cdf)
+        lbwsg_cat = pd.Series(lbwsg_cat, index=pop.index, name=category_column, dtype=get_lbwsg_category_dtype())
+        if inplace:
+            pop[category_column] = lbwsg_cat
+            return pop
+        else:
+            return lbwsg_cat
+
+    def get_exposure_cdf_for_population(self, pop):
+        """Returns the cumulative distribution function for each simulant in a population."""
+        exposure_cdf = self.get_exposure_cdf()
+        # index_cols = exposure_cdf.index.names # Should be ['age_group_id', 'draw', 'sex'], but order not guaranteed
+        extra_index_cols = ['age_group_id', 'sex']
+        pop_exposure_cdf = pop[extra_index_cols].join(exposure_cdf, on=exposure_cdf.index.names)
+        pop_exposure_cdf.drop(columns=extra_index_cols, inplace=True)
+        pop_exposure_cdf.rename_axis(columns=exposure_cdf.columns.name, inplace=True, copy=False)
+        return pop_exposure_cdf
+
+    def get_exposure_cdf(self):
+        """Returns the cumulative distribution function corresponding to the prevalences
+        in this object's exposure distribution. Categories are ordered numerically.
+        """
+        exposure_cdf = self.exposure_dist.loc[:,'prevalence'].cumsum(axis=1)
+       # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
+        exposure_cdf = exposure_cdf.droplevel(['location_id','year_id'])
+        return exposure_cdf
 
     def assign_ga_bw_from_propensities_within_cat(self, pop, category_column):
         """Assigns birthweights and gestational ages using propensities.
@@ -280,14 +444,9 @@ class LBWSGDistribution:
         pop['birthweight'] = category_data['bw_start'] + pop['bw_propensity'] * category_data['bw_width']
 
     def get_category_data_for_population(self, pop, category_column):
-        """Returns a dataframe indexed by pop.index, where each row contains data about
-        the corresponding simulant's LBWSG category.
-        """
-        interval_data = self.interval_data_by_category.loc[pop[category_column]]
-        # This verifies that the correct population indexes will be assigned to the category data below
-        assert pd.Series(interval_data.index, index=pop.index).equals(pop[category_column]), \
-            'Categories misaligned with population index!'
-        interval_data.index = pop.index
+        interval_data = (pop[[category_column]]
+                         .join(self.interval_data_by_category, on=category_column)
+                         .drop(columns=category_column))
         return interval_data
 
     def apply_birthweight_shift(self, pop, shift, bw_col='birthweight', ga_col='gestational_age',
@@ -343,19 +502,51 @@ class LBWSGDistribution:
         else:
             return pd.Series(cats, index=pop.index, name=cat_col)
 
+##########################################################
+# CLASSES FOR LBWSG RISK EFFECTS (RELATIVE RISKS) #
+##########################################################
+
 class LBWSGRiskEffect:
     def __init__(self, rr_data, paf_data=None):
-        self.rr_data = convert_draws_to_long_form(rr_data, name='relative_risk')
-        # TODO: Maybe use 'lbwsg_category' instead of 'category' throughout this module?
-        self.rr_data.rename(columns={'parameter': 'lbwsg_category'}, inplace=True)
+        """"rr_data is assumed to be preprocessed using above functions."""
+        # TODO: Enable passing raw data and then sending to preprocess from the constructor.
+        self.rr_data = rr_data
         self.paf_data = paf_data
-        
-    def assign_relative_risk(self, pop, cat_colname):
-        # TODO: Figure out better method of dealing with category column name...
-        cols_to_match = ['sex', 'age_start', 'draw', cat_colname]
-        df = pop.reset_index().merge(
-            self.rr_data.rename(columns={'lbwsg_category': cat_colname}), on=cols_to_match
-        ).set_index(pop.index.names)
-#         return df
-        pop['lbwsg_relative_risk'] = df['relative_risk']
+
+    def assign_relative_risk(self, pop, cat_colname='lbwsg_category', rr_colname='lbwsg_relative_risk', inplace=True):
+        """Assign relative risks to a population based on their lbwsg_category."""
+        rrs_by_category = self.get_relative_risks_by_category()
+        # Filter population to relevant columns to avoid potential column name collisions
+        extra_index_cols = ['sex', 'age_group_id', cat_colname] # columns to match besides draw, which is in pop.index
+        pop_data = pop[extra_index_cols]
+        # Rename the category column so it matches that in the RR data
+        if cat_colname != 'lbwsg_category':
+            pop_data = pop_data.rename(columns={cat_colname: 'lbwsg_category'})
+        # Get relative risk for each row of pop
+        pop_rrs = pop_data.join(rrs_by_category, on=rrs_by_category.index.names)['relative_risk'].rename(rr_colname)
+        if inplace:
+            pop[rr_colname] = pop_rrs
+            return pop
+        else:
+            return pop_rrs
+
+    def get_relative_risks_by_category(self):
+        """Get relative risks indexed by age_group_id, sex, draw, and lbwsg_category."""
+       # QUESTION: Is there any situation where we will need 'location_id' or 'year_id'?
+        return self.rr_data.droplevel(['location_id','year_id'])
+
+    def compute_paf(self, exposure, save_paf=True):
+        """"exposure is assumed to be preprocessed using above functions."""
+         # Drop global location to broadcast over exposure's locations
+        rr = self.rr_data.droplevel('location_id')
+        # Inner join indices to avoid NaN's when we multiply
+        df = rr.to_frame().join(exposure)
+        weighted_rr = df['relative_risk'] * df['prevalence']
+        # Sum the prevalence-weighted RR's over LBWSG categories to get the mean RR
+        groupby_levels = weighted_rr.index.names.difference(['lbwsg_category'])
+        mean_rr = weighted_rr.groupby(groupby_levels).sum()
+        paf = ((mean_rr - 1) / mean_rr).rename('paf')
+        if save_paf:
+            self.paf_data = paf
+        return paf
 
