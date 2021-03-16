@@ -9,6 +9,7 @@ import pandas as pd, numpy as np
 import re
 from typing import Tuple#, Dict, Iterable
 from pandas.api.types import CategoricalDtype
+from scipy.interpolate import interp2d
 
 import demography
 # from demography import get_age_group_data, get_sex_id_map
@@ -351,6 +352,37 @@ def get_category_data(source='gbd_mapping'):
     cat_df['bw'], cat_df['bw_width'], cat_df['bw_midpoint'] = interval_width_midpoint(cat_df.bw_start, cat_df.bw_end)
     return cat_df
 
+def get_category_neighbors(cat_df=None):
+    """Returns a dataframe indexed by LBWSG category, with each row showing the 4 neighboring categories.
+    Also contains a boolean column indicating whether the category is on the boundary of the support
+    of the exposure distribution.
+    If a category is on the boundary, its nonexistent neighbor categories are filled with NaN.
+    """
+    if cat_df is None:
+        cat_df = get_category_data()
+    # Choose shift values that are smaller than the width of any category to ensure shifts land in the interior
+    ga_shift = 0.5 # < 1
+    bw_shift = 100 # < 500
+    # Get coordinates past the boundary of each category in each of the four directions
+    ga_up = pd.Index(zip(cat_df['ga_end']+ga_shift, cat_df['bw_midpoint']))
+    ga_down = pd.Index(zip(cat_df['ga_start']-ga_shift, cat_df['bw_midpoint']))
+    bw_up = pd.Index(zip(cat_df['ga_midpoint'], cat_df['bw_end']+bw_shift))
+    bw_down = pd.Index(zip(cat_df['ga_midpoint'], cat_df['bw_start']-bw_shift))
+    
+    # Get a map from intervals to categories
+    cats_by_interval = cat_df.set_index(['ga','bw'])['lbwsg_category']
+
+    # Use .reindex to look up the category for the coordinates in each of the four directions
+    cat_neighbors = cat_df.set_index('lbwsg_category')[[]]
+    cat_neighbors['ga_up'] = cats_by_interval.reindex(ga_up).array
+    cat_neighbors['ga_down'] = cats_by_interval.reindex(ga_down).array
+    cat_neighbors['bw_up'] = cats_by_interval.reindex(bw_up).array
+    cat_neighbors['bw_down'] = cats_by_interval.reindex(bw_down).array
+    # Record whether thee category is on the boundary of the support of the distribution
+    cat_neighbors['on_boundary'] = cat_neighbors.isna().any(axis=1)
+    
+    return cat_neighbors
+
 ##########################################################
 # CLASS FOR LBWSG RISK DISTRIBUTION #
 ##########################################################
@@ -550,3 +582,55 @@ class LBWSGRiskEffect:
             self.paf_data = paf
         return paf
 
+class LBWSGRiskEffectInterp2d:
+    def __init__(self, rr_data, paf_data=None):
+        """"rr_data is assumed to be preprocessed using above functions."""
+        self.rr_data = rr_data
+        self.paf_data = paf_data
+        self.log_rr = np.log(self.rr_data.unstack('lbwsg_category').droplevel(['location_id', 'year_id']))
+        self.log_rr_splines = self.generate_logspace_splines()
+
+    def generate_logspace_splines(self):
+        interval_data_by_cat = get_category_data().set_index('lbwsg_category')
+        x = interval_data_by_cat['bw_midpoint']
+        y = interval_data_by_cat['ga_midpoint']
+        assert x.index.equals(self.log_rr.columns) and y.index.equals(self.log_rr.columns)
+
+        def make_spline(z):
+            # z will be a row of self.log_rr
+            # Reindex z to make sure categories are aligned with x
+            return interp2d(x,y,z.reindex(x.index, copy=False), kind='linear', bounds_error=False, fill_value=None)
+
+        log_rr_splines = self.log_rr.apply(make_spline, axis='columns').rename('log_rr_spline')
+        return log_rr_splines
+
+    def get_splines_for_population(self, pop):
+        extra_index_cols = ['age_group_id', 'sex']
+        pop_splines = (
+            pop[extra_index_cols]
+            .join(self.log_rr_splines, on=self.log_rr_splines.index.names)
+            .drop(columns=extra_index_cols)
+        )
+        return pop_splines
+
+    def assign_relative_risk(self, pop, rr_colname='interpolated_lbwsg_relative_risk', inplace=True):
+        pop_log_rr_splines = self.get_splines_for_population(pop)
+
+        def evaluate_spline(row):
+            # 'log_rr_spline' = pop_log_rr_splines.name, if pop_log_rr_splines were a Series
+            return row['log_rr_spline'](row['birthweight'], row['gestational_age'])
+
+        # [['birthweight','gestational_age']]
+        log_rr = (
+            pop[['birthweight','gestational_age']]
+            .join(pop_log_rr_splines)
+            .apply(evaluate_spline, axis=1)
+            .astype(float)
+        )
+
+        rr = np.exp(log_rr).rename(rr_colname)
+        if inplace:
+            pop[rr_colname] = rr
+            return pop
+        else:
+            return rr
