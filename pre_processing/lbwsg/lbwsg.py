@@ -9,7 +9,7 @@ import pandas as pd, numpy as np
 import re
 from typing import Tuple#, Dict, Iterable
 from pandas.api.types import CategoricalDtype
-from scipy.interpolate import interp2d
+from scipy.interpolate import interp2d, griddata, RectBivariateSpline
 
 import demography
 # from demography import get_age_group_data, get_sex_id_map
@@ -358,6 +358,8 @@ def get_category_neighbors(cat_df=None):
     Also contains a boolean column indicating whether the category is on the boundary of the support
     of the exposure distribution.
     If a category is on the boundary, its nonexistent neighbor categories are filled with NaN.
+    The returned dataframe `cat_neighbors` can be joined with the category dataframe `cat_df` as follows:
+    cat_df.join(cat_neighbors, on='lbwsg_category')
     """
     if cat_df is None:
         cat_df = get_category_data()
@@ -383,6 +385,21 @@ def get_category_neighbors(cat_df=None):
     cat_neighbors['on_boundary'] = cat_neighbors.isna().any(axis=1)
     
     return cat_neighbors
+
+def get_category_midpoint_grid_axes(cat_df=None, include_boundary_points=True):
+    """Returns sorted 1d-arrays of GA coordinates and BW coordinates for the range of category midpoints,
+    optionally including the minimum and maximum values of GA and BW.
+    """
+    if cat_df is None:
+        cat_df = get_category_data()
+    ga_range = np.unique(cat_df['ga_midpoint'])
+    bw_range = np.unique(cat_df['bw_midpoint'])
+    if include_boundary_points:
+        ga_range = np.append(ga_range, [cat_df['ga_start'].min(), cat_df['ga_end'].max()])
+        bw_range = np.append(bw_range, [cat_df['bw_start'].min(), cat_df['bw_end'].max()])
+    ga_range.sort()
+    bw_range.sort()
+    return ga_range, bw_range
 
 def get_relative_risk_set_by_category(rr_data, draw=0, age_group_id=2, sex='Female', location_id=1, year_id=2019, take_mean=False):
     """rr_data is assumed to be GBD's LBWSG RR data returned by get_draws.
@@ -596,7 +613,9 @@ class LBWSGRiskEffect:
         return self.rr_data.droplevel(['location_id','year_id'])
 
     def compute_paf(self, exposure, save_paf=True):
-        """"exposure is assumed to be preprocessed using above functions."""
+        """"Computes the Population Attributable Fraction (PAF) using this object's relative risks
+        and the given exposure data. Exposure is assumed to be preprocessed using above functions.
+        """
          # Drop global location to broadcast over exposure's locations
         rr = self.rr_data.droplevel('location_id')
         # Inner join indices to avoid NaN's when we multiply
@@ -610,6 +629,15 @@ class LBWSGRiskEffect:
             self.paf_data = paf
         return paf
 
+    def compute_paf_for_population(self, pop, rr_colname='lbwsg_relative_risk'):
+        """"Computes the Population Attributable Fraction (PAF) for the given population,
+        indexed by draw, age_group_id, and sex,
+        using the relative risks in specified column of the population table.
+        This is a convenience method, as it does not rely on any properties of this RiskEffect instance.
+        """
+        pop_mean_rr = pop.groupby(['draw', 'age_group_id', 'sex'])[rr_colname].mean()
+        return ((pop_mean_rr - 1) / pop_mean_rr).rename('population_paf')
+
 class LBWSGRiskEffectInterp2d:
     def __init__(self, rr_data, paf_data=None):
         """"rr_data is assumed to be preprocessed using above functions."""
@@ -618,18 +646,19 @@ class LBWSGRiskEffectInterp2d:
 #         self.log_rr = np.log(self.rr_data.unstack('lbwsg_category').droplevel(['location_id', 'year_id']))
         self.log_rr_splines = self.generate_logspace_splines()
 
-    def get_log_rr(self):
+    def get_log_relative_risks(self):
+        # QUESTION: Is there ever a situation where we'd want 'location_id' or 'year_id'??
         return np.log(self.rr_data.unstack('lbwsg_category').droplevel(['location_id', 'year_id']))
 
     def generate_logspace_splines(self):
-        log_rr = self.get_log_rr()
+        log_rr = self.get_log_relative_risks()
         interval_data_by_cat = get_category_data().set_index('lbwsg_category')
         x = interval_data_by_cat['bw_midpoint']
         y = interval_data_by_cat['ga_midpoint']
         assert x.index.equals(log_rr.columns) and y.index.equals(log_rr.columns)
 
         def make_spline(z):
-            # z will be a row of self.log_rr
+            # z will be a row of log_rr
             # Reindex z to make sure categories are aligned with x... shouldn't be necessary if above assert statement passes
             # Setting bounds_error=False, fill_value=None will extrapolate by nearest neighbor for out of bounds
 #             print(x)
@@ -654,7 +683,8 @@ class LBWSGRiskEffectInterp2d:
         pop_log_rr_splines = self.get_splines_for_population(pop)
 
         def evaluate_spline(row):
-            # 'log_rr_spline' = pop_log_rr_splines.name, if pop_log_rr_splines were a Series
+            # 'log_rr_spline' = pop_log_rr_splines.name...
+            # if pop_log_rr_splines were a Series, but it's a DataFrame
             return row['log_rr_spline'](row[bw_colname], row[ga_colname])[0] # spline returns an array, so access 1st element
 
         # [['birthweight','gestational_age']]
@@ -677,3 +707,89 @@ class LBWSGRiskEffectInterp2d:
             return pop
         else:
             return rr
+
+class LBWSGRiskEffectRBVSpline(LBWSGRiskEffect):
+    def __init__(self, rr_data, paf_data=None):
+        super().__init__(self, rr_data, paf_data)
+        self.log_rr_interpolators = self.generate_logspace_interpolators()
+
+    def get_log_relative_risks(self):
+        # QUESTION: Is there ever a situation where we'd want 'location_id' or 'year_id'??
+        return np.log(self.rr_data.unstack('lbwsg_category').droplevel(['location_id', 'year_id']))
+
+    def generate_logspace_interpolators(self):
+        log_rr = self.get_log_relative_risks() # Each row is one draw, age group, and sex, columns are categories
+        cat_df = get_category_data()
+
+        # Get the category midpoints, which will be our initial (x,y) values for the interpolation
+        interval_data_by_cat = cat_df.set_index('lbwsg_category')
+        ga_mid = interval_data_by_cat['ga_midpoint']
+        bw_mid = interval_data_by_cat['bw_midpoint']
+        # Make sure z values are correctly aligned with x and y values (should hold because categories are ordered)
+        assert ga_mid.index.equals(log_rr.columns) and bw_mid.index.equals(log_rr.columns)
+
+        # Get the range of midpoints (plus boundary points) to form an intermediate grid on which
+        # to bootstrap the interpolation using nearest neighbor
+        ga_range, bw_range = get_category_midpoint_grid_axes(cat_df)
+
+        def make_interpolator(log_rr_for_draw_age_sex):
+            # log_rr_for_draw_age_sex will be a single row of log_rr, containing log(RR) for each category
+            # First interpolate log(RR)'s to the intermediate midpoint grid using nearest neighbor interpolation
+            logrr_nn_griddata = griddata(
+                (ga_mid, bw_mid), log_rr_for_draw_age_sex, (ga_range[:,None], bw_range[None,:]),
+                method='nearest', rescale=True
+            )
+            # Now use the grid interpolation to create an interpolator for the whole GAxBW rectangle
+            return RectBivariateSpline(ga_range, bw_range, logrr_nn_griddata, kx=1, ky=1)
+
+        log_rr_interpolators = log_rr.apply(make_interpolator, axis='columns').rename('log_rr_interpolator')
+        return log_rr_interpolators
+
+    def get_interpolators_for_population(self, pop):
+        extra_index_cols = ['age_group_id', 'sex']
+        pop_interpolators = (
+            pop[extra_index_cols]
+            .join(self.log_rr_interpolators, on=self.log_rr_interpolators.index.names)
+            #.drop(columns=extra_index_cols)
+            ['log_rr_interpolator']
+        )
+        return pop_interpolators
+
+    def assign_relative_risk(self, pop, bw_colname='birthweight', ga_colname='gestational_age', rr_colname='lbwsg_relative_risk', logrr_colname='log_lbwsg_relative_risk', inplace=True):
+        pop_log_rr_interpolators = self.get_interpolators_for_population(pop)
+
+        def interpolate(row):
+            # row will correspond to a row of the population table, joined with the correct interpolator for each simulant
+            # 'log_rr_interpolator' = pop_log_rr_interpolators.name...
+            # interpolator returns a 0-D, 1-D or 2-D array with 1 element, so access 1st element
+            return row['log_rr_interpolator'](row[ga_colname], row[bw_colname]).flat[0]
+
+        log_rr = (
+            pop[[bw_colname, ga_colname]]
+            .join(pop_log_rr_interpolators)
+            .apply(interpolate, axis=1)
+            .rename(logrr_colname)
+        )
+        # Make sure interpolated log RR's are in same range as GBD data
+        assert log_rr.min()>=0 and log_rr.max()<7.4, f"log(RR)'s out of range! {log_rr.min()=} {log_rr.max()=}"
+
+        rr = np.exp(log_rr).rename(rr_colname)
+        if inplace:
+            if logrr_colname is not None:
+                pop[logrr_colname] = log_rr
+            pop[rr_colname] = rr
+            return pop
+        elif logrr_colname is not None:
+            return pd.concat([log_rr, rr], axis=1)
+        else:
+            return rr
+
+
+    def assign_categorical_relative_risk(self, pop, cat_colname='lbwsg_category', rr_colname='lbwsg_relative_risk_for_category', inplace=True):
+        super().assign_relative_risk(pop, cat_colname, rr_colname, inplace)
+        
+    def compute_categorical_paf(self, exposure, save_paf=False):
+        return super().compute_paf(exposure, save_paf):
+    
+    def compute_paf(self, exposure, save_paf=True):
+        return NotImplementedError("PAF computation via 2D-integration is not yet implemented")
