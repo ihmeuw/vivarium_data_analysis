@@ -42,7 +42,9 @@ def get_iron_concentration(location, draws):
     """
     if location == 'India':
         iron_conc_dist = stats.uniform(loc=14, scale=21.5-14), # Uniform(14,21.5) mg iron as NaFeEDTA per kg flour
-        if len(draws) == 1:
+#         if take_mean: # we'd have to pass another argument
+#         if isinstance(draws, pd.CategoricalIndex): # We used a categorical index if we took the mean over draws
+        if len(draws) == 1: # Use our best guess if there's only one draw or we took the mean
             iron_concentration = iron_conc_dist.mean()
         else:
             iron_concentration = pd.Series(
@@ -108,27 +110,36 @@ def get_flour_coverage_df():
     # Eventually, this will need to be updated to incorporate data from more countries.
     return lsff_plots.get_coverage_dfs()['flour'].T
 
-def get_global_data(draws):
+def get_global_data(draws, mean_draws_name=None):
     """
     Information shared between locations and scenarios. May vary by draw.
     
     Returns
     -------
-    draws
+    draw_numbers
+    draws - a pandas Index object
     dose-response of birthweight for iron (g per additional 10mg iron per day)
     """
-    draws = pd.Index(draws, dtype='int64', name='draw')
+    draw_numbers = draws # Save original values in case we take the mean over draws
+#     take_mean = mean_draws_name is not None
+    if mean_draws_name is None:
+        draws = pd.Index(draws, dtype='int64', name='draw')
+    else:
+        # Use the single mean value as the only "draw", labeled by `mean_draws_name`
+        draws = pd.CategoricalIndex([mean_draws_name], name='draw')
+
     bw_dose_response_distribution = create_bw_dose_response_distribution()
-#     if len(draws) == 1:
+#     if len(draws)==1:
 #         birthweight_dose_response = bw_dose_response_distribution.mean()
 #     else:
+    # Use our best guess if there's only one draw or we took the mean
     birthweight_dose_response = pd.Series(
         bw_dose_response_distribution.rvs(size=len(draws)) if len(draws)>1 else bw_dose_response_distribution.mean(),
         index=draws,
         name='birthweight_dose_response'
     )
-    GlobalIronFortificationData = namedtuple('GlobalIronFortificationData', "draws, birthweight_dose_response")
-    return GlobalIronFortificationData(draws, birthweight_dose_response)
+    GlobalIronFortificationData = namedtuple('GlobalIronFortificationData', "draw_numbers, draws, birthweight_dose_response")
+    return GlobalIronFortificationData(draw_numbers, draws, birthweight_dose_response)
 
 def get_local_data(location, global_data):
     """
@@ -151,7 +162,7 @@ def get_local_data(location, global_data):
         global_data.birthweight_dose_response, # indexed by draw
         iron_concentration, # scalar or indexed by draw
         mean_daily_flour # scalar
-    )
+    ) # returns a Series since global_data.birthweight_dose_response is a Series
     mean_birthweight_shift.rename('mean_birthweight_shift', inplace=True)
     # Load flour coverage data
     # TODO: For now these are scalars, but we can easily add samples from beta distributions indexed by draw
@@ -199,14 +210,19 @@ class IronFortificationIntervention:
 #         self.dose_response = self.bw_dose_response_distribution.rvs()
 #         self.iron_concentration = self.iron_conc_distribution.rvs()
 
-    def assign_propensities(self, pop):
-        """
-        Assigns propensities to simualants for quantities relevant to this intervention.
-        """
-        propensities = np.random.uniform(size=(len(pop),2))
-        pop['iron_fortification_propensity'] = propensities[:,0]
-        pop['mother_flour_consumption_propensity'] = propensities[:,1]
-    
+      # TODO: Perhaps create a Population class that can assign the propensities by getting called from here...
+#     def assign_propensities(self, pop):
+#         """
+#         Assigns propensities to simualants for quantities relevant to this intervention.
+#         """
+#         propensities = np.random.uniform(size=(len(pop),2))
+#         pop['iron_fortification_propensity'] = propensities[:,0]
+#         pop['mother_flour_consumption_propensity'] = propensities[:,1]
+
+    def get_propensity_names(self):
+        """Get the names of the propensities used by this object."""
+        return 'iron_fortification_propensity', 'mother_flour_consumption_propensity'
+
     def assign_treatment_deleted_birthweight(self, pop, lbwsg_distribution, baseline_coverage):
         """
         Assigns "treatment-deleted" birthweights to each simulant in the population,
@@ -217,10 +233,14 @@ class IronFortificationIntervention:
 #         flour_consumption = sample_flour_consumption(10_000)
 #         mean_bw_shift = calculate_birthweight_shift(self.global_data.dose_response, self.iron_concentration, flour_consumption).mean()
         # Shift everyone's birthweight down by the average shift
-        # TODO: actually, maybe we don't need to store the treatment-deleted category, only the treated categories
-        shifted_pop = lbwsg_distribution.apply_birthweight_shift(
-            pop, -baseline_coverage * self.local_data.mean_birthweight_shift)
-        pop['treatment_deleted_birthweight'] = shifted_pop['new_birthweight']
+#         # Old version that couldn't modify in place:
+#         # TODO: actually, maybe we don't need to store the treatment-deleted category, only the treated categories
+#         # 2021-03-07: Actually, I now lean towards just recording everything, which is the default in the new lbwsg funcions.
+#         shifted_pop = lbwsg_distribution.apply_birthweight_shift(
+#             pop, -baseline_coverage * self.local_data.mean_birthweight_shift)
+#         pop['treatment_deleted_birthweight'] = shifted_pop['new_birthweight']
+        lbwsg_distribution.apply_birthweight_shift(
+            pop, -baseline_coverage * self.local_data.mean_birthweight_shift, shifted_col_prefix='treatment_deleted')
 
     def assign_treated_birthweight(self, pop, lbwsg_distribution, target_coverage):
         """
@@ -228,7 +248,7 @@ class IronFortificationIntervention:
         Assumes `assign_propensities` and `assign_treatment_deleted_birthweight` have already been called on pop.
         """
         pop['mother_is_iron_fortified'] = pop['iron_fortification_propensity'] < target_coverage
-        # TODO: Can this line be rewritten to avoid sampling flour consumption for rows that will get set to 0?
+        # DONE: Can this line be rewritten to avoid sampling flour consumption for rows that will get set to 0?
         # Yes, initialize the column with pop['mother_is_iron_fortified'].astype(float),
         # then index to the relevant rows and reassign.
         # NOTE: If we want to compare intervention to baseline by simulant, we can't sample flour consumption
@@ -246,16 +266,12 @@ class IronFortificationIntervention:
         # This should broadcast draws of dose response and iron concentration over simulant id's indexing daily flour
         pop['birthweight_shift'] = calculate_birthweight_shift(
             self.global_data.birthweight_dose_response, self.local_data.iron_concentration, pop['mother_daily_flour'])
+#         # Old version that couldn't modify in place:
+#         shifted_pop = lbwsg_distribution.apply_birthweight_shift(
+#             pop, pop['birthweight_shift'], bw_col='treatment_deleted_birthweight')
+#         pop['treated_birthweight'] = shifted_pop['new_birthweight']
+#         pop['treated_lbwsg_cat'] = shifted_pop['new_lbwsg_cat']
+        # Note: The new columns will be called 'treated_treatment_deleted_birthweight' and 'treated_lbwsg_cat'...
         shifted_pop = lbwsg_distribution.apply_birthweight_shift(
-            pop, pop['birthweight_shift'], bw_col='treatment_deleted_birthweight')
-        pop['treated_birthweight'] = shifted_pop['new_birthweight'] 
-        pop['treated_lbwsg_cat'] = shifted_pop['new_lbwsg_cat']
-        
-    
-    
-    
-    
-    
+            pop, pop['birthweight_shift'], bw_col='treatment_deleted_birthweight', shifted_col_prefix='treated')
 
-        
-        
