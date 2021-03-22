@@ -5,7 +5,7 @@ from collections import namedtuple
 
 sys.path.append(os.path.abspath("../.."))
 from pre_processing.id_helper import *
-import rank_countries_by_stunting as rbs
+# import rank_countries_by_stunting as rbs
 
 from db_queries import get_ids, get_population, get_outputs, get_best_model_versions
 from get_draws.api import get_draws

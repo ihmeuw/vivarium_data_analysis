@@ -20,8 +20,8 @@ if importlib.util.find_spec('gbd_mapping') is not None:
     gbd_mapping = importlib.import_module('gbd_mapping')
 if importlib.util.find_spec('db_queries') is not None:
     get_ids = importlib.import_module('db_queries').get_ids
-if importlib.util.find_spec('get_draws') is not None:
-    get_draws = importlib.import_module('get_draws').api.get_draws
+if importlib.util.find_spec('get_draws.api') is not None:
+    get_draws = importlib.import_module('get_draws.api').get_draws
 
 LBWSG_REI_ID = 339 # GBD's "risk/etiology/impairment" id for Low birthweight and short gestation
 GBD_2019_ROUND_ID = 6
@@ -33,7 +33,7 @@ GBD_2019_ROUND_ID = 6
 MISSING_CATEGORY_GBD_2017 = {'cat212': 'Birth prevalence - [37, 38) wks, [1000, 1500) g'}
 
 # Category to indicate that birthweight and gestational age are outside the domain of the risk distribution
-OUTSIDE_BOUNDS_CATEGORY = 'cat_outside_bounds'
+# OUTSIDE_BOUNDS_CATEGORY = 'cat_outside_bounds'
 
 # The dictionary below was created with the following code:
 # CATEGORY_TO_MEID_GBD_2019 = (
@@ -519,9 +519,8 @@ class LBWSGDistribution:
         # Apply the shift in the new birthweight column
         pop[shifted_bw_col] = pop[bw_col] + shift
         # Assign the new category and mark where (ga,bw) is out of bounds
-        self.assign_category_for_bw_ga(pop, shifted_bw_col, ga_col, shifted_cat_col,
-                                       fill_outside_bounds=OUTSIDE_BOUNDS_CATEGORY, inplace=True)
-        pop['valid_shift'] = pop[shifted_cat_col] != OUTSIDE_BOUNDS_CATEGORY
+        self.assign_category_for_bw_ga(pop, shifted_bw_col, ga_col, shifted_cat_col, inplace=True) #fill_outside_bounds=OUTSIDE_BOUNDS_CATEGORY,
+        pop['valid_shift'] = pop[shifted_cat_col].notna() #!= OUTSIDE_BOUNDS_CATEGORY
         # Reset out-of-bounds birthweights and categories back to their original values
         pop.loc[~pop['valid_shift'], shifted_bw_col] = pop.loc[~pop['valid_shift'], bw_col].array
         pop.loc[~pop['valid_shift'], shifted_cat_col] = self.assign_category_for_bw_ga(
@@ -531,7 +530,7 @@ class LBWSGDistribution:
             pop.drop(columns=[ga_col, bw_col, cat_col], inplace=True)
             return pop
 
-    def assign_category_for_bw_ga(self, pop, bw_col, ga_col, cat_col, fill_outside_bounds=None, inplace=True):
+    def assign_category_for_bw_ga(self, pop, bw_col, ga_col, cat_col, inplace=True): # fill_outside_bounds=None,
         """Assigns the correct LBWSG category to each simulant in the population,
         given birthweights and gestational ages.
         Modifies the population table in place if inplace=True (default), otherwise returns a pandas Series
@@ -541,20 +540,21 @@ class LBWSGDistribution:
         If `fill_outside_bounds` is not None, its value will be used to fill the category value for invalid
         (birthweight, gestational age) pairs.
         """
-        # Need to convert the ga and bw columns to a pandas Index to work with .get_indexer below
+        # Need to convert the ga and bw columns to a pandas Index to work with .reindex or .get_indexer below
         ga_bw_for_pop = pd.MultiIndex.from_frame(pop[[ga_col, bw_col]])
-        # Default is to raise an indexing error if bw and gw are outside bounds
-        if fill_outside_bounds is None:
-            # Must convert cats to a pandas array to avoid trying to match differing indexes
-            cats = self.categories_by_interval.loc[ga_bw_for_pop].array
-            # TODO: See if doing the following instead will result in the same behavior as below for invalid bw, ga:
-            # cats = self.categories_by_interval.reindex(ga_bw_for_pop).array
-        # Otherwise, the category for out-of-bounds (ga,bw) pairs will be assigned the value `fill_outside_bounds`
-        else:
-            # Get integer index of category, to check for out-of-bounds (ga,bw) pairs (iidx==-1 if (ga,bw) not in index)
-            iidx = self.categories_by_interval.index.get_indexer(ga_bw_for_pop)
-            cats = np.where(iidx != -1, self.categories_by_interval.iloc[iidx], fill_outside_bounds)
+#         # Default is to raise an indexing error if bw and gw are outside bounds
+#         if fill_outside_bounds is None:
+#             # Must convert cats to a pandas array to avoid trying to match differing indexes
+#             cats = self.categories_by_interval.loc[ga_bw_for_pop].array
+#             # TODO: See if doing the following instead will result in the same behavior as below for invalid bw, ga:
+#             # cats = self.categories_by_interval.reindex(ga_bw_for_pop).array
+#         # Otherwise, the category for out-of-bounds (ga,bw) pairs will be assigned the value `fill_outside_bounds`
+#         else:
+#             # Get integer index of category, to check for out-of-bounds (ga,bw) pairs (iidx==-1 if (ga,bw) not in index)
+#             iidx = self.categories_by_interval.index.get_indexer(ga_bw_for_pop)
+#             cats = np.where(iidx != -1, self.categories_by_interval.iloc[iidx], fill_outside_bounds)
         # We have to cast cats to a pandas array to avoid trying to match differing indexes
+        cats = self.categories_by_interval.reindex(ga_bw_for_pop).array
         if inplace:
             pop[cat_col] = cats
         else:
@@ -649,14 +649,14 @@ class LBWSGRiskEffectInterp2d:
 
         def evaluate_spline(row):
             # 'log_rr_spline' = pop_log_rr_splines.name, if pop_log_rr_splines were a Series
-            return row['log_rr_spline'](row[bw_colname], row[ga_colname])
+            return row['log_rr_spline'](row[bw_colname], row[ga_colname])[0] # spline returns an array, so access 1st element
 
         # [['birthweight','gestational_age']]
         log_rr = (
             pop[[bw_colname, ga_colname]]
             .join(pop_log_rr_splines)
             .apply(evaluate_spline, axis=1)
-            .astype(float)
+#             .astype(float)
         )
         # Make sure log RR's are nonnegative so RR's will be >=1,
         # and that they aren't too large, which will cause overflow.

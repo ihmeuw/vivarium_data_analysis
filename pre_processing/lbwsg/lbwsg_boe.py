@@ -5,9 +5,9 @@ import demography, lbwsg, lsff_interventions
 from lbwsg import LBWSGDistribution, LBWSGRiskEffect
 from lsff_interventions import IronFortificationIntervention
 
-import sys, os.path
-sys.path.append(os.path.abspath("../.."))
-from pre_processing import id_helper
+# import sys, os.path
+# sys.path.append(os.path.abspath("../.."))
+# from pre_processing import id_helper
 
 # Class to store and name the arguments passed to main()
 ParsedArgs = namedtuple('ParsedArgs', "location, artifact_path, year, draws, take_mean, random_seed, num_simulants")
@@ -65,7 +65,7 @@ class IronBirthweightCalculator:
     
     treated_lbwsg_rr_colname = 'treated_lbwsg_rr'
 
-    def __init__(self, location, artifact_path, year, draws,
+    def __init__(self, location, artifact_path, year, draws, vehicle, covered_proportion_of_eats_fortifiable,
                  take_mean=False, risk_effect_class=lbwsg.LBWSGRiskEffect, random_seed=None):
         """
         """
@@ -90,7 +90,8 @@ class IronBirthweightCalculator:
 #         baseline_coverage = flour_coverage_df.loc[location, ('eats_fortified', 'mean')] / 100
 #         intervention_coverage = flour_coverage_df.loc[location, ('eats_fortifiable', 'mean')] / 100
         self.global_data = lsff_interventions.get_global_data(draws, mean_draws_name=mean_draws_name)
-        self.local_data = lsff_interventions.get_local_data(location, self.global_data)
+        self.local_data = lsff_interventions.get_local_data(
+            self.global_data, location, vehicle, covered_proportion_of_eats_fortifiable)
         
         # Load LBWSG data
         if year==2017:
@@ -100,14 +101,16 @@ class IronBirthweightCalculator:
                 artifact_path, 'relative_risk', "age_end < 1", f"year_start == {year}", draws=draws)
         elif year==2019:
             exposure_data = pd.read_hdf(artifact_path, f"/gbd_2019/exposure/bmgf_25_countries")
-            location_id = id_helper.list_ids('location', location)
+#             location_id = id_helper.list_ids('location', location)
             exposure_data = lbwsg.preprocess_gbd_data(
                 exposure_data, draws=draws,
-                filter_terms=[f"location_id == {location_id}"],
+                filter_terms=[f"location_id == {self.local_data.location_id}"],
                 mean_draws_name=mean_draws_name
             )
             rr_data = pd.read_hdf(artifact_path, '/gbd_2019/relative_risk/diarrheal_diseases')
-            rr_data = lbwsg.preprocess_gbd_data(rr_data, draws=draws, mean_draws_name=mean_draws_name)
+            # For now we only need early neonatal RR's
+            rr_data = lbwsg.preprocess_gbd_data(
+                rr_data, draws=draws, filter_terms=["age_group_id==2"], mean_draws_name=mean_draws_name)
         
 #         if take_mean:
 #             exposure_data = exposure_data.mean(axis=1).rename(mean_draws_name).to_frame()
