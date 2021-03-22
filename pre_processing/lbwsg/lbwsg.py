@@ -710,7 +710,7 @@ class LBWSGRiskEffectInterp2d:
 
 class LBWSGRiskEffectRBVSpline(LBWSGRiskEffect):
     def __init__(self, rr_data, paf_data=None):
-        super().__init__(self, rr_data, paf_data)
+        super().__init__(rr_data, paf_data)
         self.log_rr_interpolators = self.generate_logspace_interpolators()
 
     def get_log_relative_risks(self):
@@ -789,7 +789,7 @@ class LBWSGRiskEffectRBVSpline(LBWSGRiskEffect):
         super().assign_relative_risk(pop, cat_colname, rr_colname, inplace)
         
     def compute_categorical_paf(self, exposure, save_paf=False):
-        return super().compute_paf(exposure, save_paf):
+        return super().compute_paf(exposure, save_paf)
     
     def compute_paf(self, exposure, save_paf=True):
         return NotImplementedError("PAF computation via 2D-integration is not yet implemented")
