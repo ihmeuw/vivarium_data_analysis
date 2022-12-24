@@ -134,3 +134,5 @@ dmypy.json
 # Flag to explicitly ignore files
 *__gitignore__*
 
+# macOS stuff
+*.DS_Store
